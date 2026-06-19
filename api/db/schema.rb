@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_19_034439) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_19_164360) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,10 +59,51 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_034439) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "location_extracted_at"
+    t.string "location_source"
+    t.float "location_confidence"
+    t.datetime "location_confirmed_at"
+    t.bigint "primary_shop_id"
     t.index ["country"], name: "index_artists_on_country"
     t.index ["handle"], name: "index_artists_on_handle", unique: true
     t.index ["latitude", "longitude"], name: "index_artists_on_latitude_and_longitude"
+    t.index ["primary_shop_id"], name: "index_artists_on_primary_shop_id"
     t.index ["region"], name: "index_artists_on_region"
+  end
+
+  create_table "location_signals", force: :cascade do |t|
+    t.bigint "artist_id", null: false
+    t.bigint "shop_id"
+    t.string "source_type", null: false
+    t.string "source_account"
+    t.string "city"
+    t.string "region"
+    t.string "country"
+    t.float "confidence"
+    t.datetime "observed_at"
+    t.string "raw"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id", "source_type"], name: "index_location_signals_on_artist_id_and_source_type"
+    t.index ["artist_id"], name: "index_location_signals_on_artist_id"
+    t.index ["shop_id"], name: "index_location_signals_on_shop_id"
+  end
+
+  create_table "memberships", force: :cascade do |t|
+    t.bigint "artist_id", null: false
+    t.bigint "shop_id", null: false
+    t.string "role"
+    t.string "source"
+    t.boolean "mutual"
+    t.float "confidence"
+    t.boolean "current"
+    t.datetime "first_seen_at"
+    t.datetime "last_confirmed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id", "shop_id"], name: "index_memberships_on_artist_id_and_shop_id", unique: true
+    t.index ["artist_id"], name: "index_memberships_on_artist_id"
+    t.index ["current"], name: "index_memberships_on_current"
+    t.index ["shop_id"], name: "index_memberships_on_shop_id"
   end
 
   create_table "posts", force: :cascade do |t|
@@ -79,7 +120,29 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_034439) do
     t.index ["posted_at"], name: "index_posts_on_posted_at"
   end
 
+  create_table "shops", force: :cascade do |t|
+    t.string "handle", null: false
+    t.string "name"
+    t.boolean "is_business"
+    t.text "bio"
+    t.string "address_raw"
+    t.string "city"
+    t.string "region"
+    t.string "country"
+    t.float "latitude"
+    t.float "longitude"
+    t.datetime "profile_scraped_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["handle"], name: "index_shops_on_handle", unique: true
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "artists", "shops", column: "primary_shop_id"
+  add_foreign_key "location_signals", "artists"
+  add_foreign_key "location_signals", "shops"
+  add_foreign_key "memberships", "artists"
+  add_foreign_key "memberships", "shops"
   add_foreign_key "posts", "artists"
 end

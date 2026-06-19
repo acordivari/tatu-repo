@@ -74,29 +74,43 @@ namespace :instagram do
     abort "No artists need location extraction." if artists.empty?
 
     extractor = LocationExtractor.new
-    puts "Extracting locations for #{artists.size} artists via Claude (#{LocationExtractor::MODEL})…"
-    found = 0
-    # Process in chunks so progress + cost are saved incrementally.
+    puts "Extracting location + shop for #{artists.size} artists via Claude (#{LocationExtractor::MODEL})…"
+    with_loc = 0
+    with_shop = 0
     artists.each_slice(100) do |chunk|
-      locations = extractor.extract(chunk.map(&:bio))
+      results = extractor.extract(chunk.map(&:bio))
       chunk.each_with_index do |artist, i|
-        loc = locations[i]
-        if loc&.present?
-          # LLM is authoritative; reset coords so the geocode pass re-resolves.
-          artist.update_columns(
-            city: loc.city, region: loc.region, country: loc.country,
-            location_raw: loc.to_query, latitude: nil, longitude: nil,
-            location_extracted_at: Time.current, updated_at: Time.current
-          )
-          found += 1
-        else
-          artist.update_columns(location_extracted_at: Time.current, updated_at: Time.current)
+        ext = results[i]
+        if ext
+          ArtistSignalBuilder.new(artist, ext).call
+          with_loc += 1 if ext.location?
+          with_shop += 1 if ext.shop?
         end
+        artist.update_columns(location_extracted_at: Time.current, updated_at: Time.current)
       end
-      print "\r  processed #{[artists.index(chunk.last) + 1, artists.size].min}/#{artists.size}, with location: #{found}, cost so far: $#{extractor.cost_usd.round(3)}"
+      print "\r  processed up to #{[artists.index(chunk.last) + 1, artists.size].min}/#{artists.size} | location:#{with_loc} shop:#{with_shop} | cost: $#{extractor.cost_usd.round(3)}"
     end
-    puts "\nDone. #{found}/#{artists.size} got a location. Cost: $#{extractor.cost_usd.round(3)}."
-    puts "Next: rake instagram:geocode   (turns locations into map coordinates)"
+    puts "\nDone. #{with_loc} location signals, #{with_shop} shop links, #{Shop.count} unique shops. Cost: $#{extractor.cost_usd.round(3)}."
+    puts "Next: rake instagram:resolve_locations   (resolve best signal -> map coordinates)"
+  end
+
+  desc "Resolve each artist's location from the evidence ledger (throttled geocoding). Usage: rake instagram:resolve_locations[limit]"
+  task :resolve_locations, [:limit] => :environment do |_t, args|
+    scope = Artist.where(id: LocationSignal.select(:artist_id).distinct)
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    artists = scope.to_a
+    abort "No artists have location signals yet." if artists.empty?
+
+    puts "Resolving locations for #{artists.size} artists…"
+    tally = Hash.new(0)
+    artists.each_with_index do |artist, i|
+      status = LocationResolver.new(artist).call.status
+      tally[status] += 1
+      # Only the :located path made a (throttled) geocoding call.
+      sleep 1.1 if status == :located
+      print "\r  #{i + 1}/#{artists.size} | located:#{tally[:located]} unchanged:#{tally[:unchanged]} unlocatable:#{tally[:unlocatable]}"
+    end
+    puts "\nDone. On map now: #{Artist.located.count}."
   end
 
   desc "Geocode artists that have a location string but no coordinates (throttled). Usage: rake instagram:geocode[limit]"

@@ -1,5 +1,9 @@
 class Artist < ApplicationRecord
   has_many :posts, dependent: :nullify
+  has_many :memberships, dependent: :destroy
+  has_many :shops, through: :memberships
+  has_many :location_signals, dependent: :destroy
+  belongs_to :primary_shop, class_name: "Shop", optional: true
 
   validates :handle, presence: true, uniqueness: { case_sensitive: false }
 

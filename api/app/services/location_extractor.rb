@@ -12,9 +12,13 @@ class LocationExtractor
   MODEL = :"claude-haiku-4-5"
   BATCH_SIZE = 25
 
-  Location = Struct.new(:city, :region, :country, keyword_init: true) do
-    def present?
+  Extraction = Struct.new(:city, :region, :country, :shop, :role, keyword_init: true) do
+    def location?
       [city, region, country].any?(&:present?)
+    end
+
+    def shop?
+      shop.present?
     end
 
     def to_query
@@ -22,18 +26,27 @@ class LocationExtractor
     end
   end
 
+  ROLES = %w[owner resident working guest unknown].freeze
+
   INSTRUCTIONS = <<~TXT.freeze
-    You extract the tattoo artist's primary studio/home location from each Instagram bio.
+    You read tattoo-artist Instagram bios and extract two things: their primary
+    location and the studio/shop they work at.
     Return ONLY a JSON array — one object per bio, in input order, with keys:
       "i": the bio's index number
       "city": city name, or null
       "region": state/province/region, or null
       "country": full country name (e.g. "United States", "Brazil"), or null
+      "shop": the Instagram handle of the studio they work at (no leading @), or null
+      "role": one of "owner","resident","working","guest","unknown" describing their
+              relationship to that shop, or null if no shop
     Rules:
-    - Use null for any field not clearly stated. If the bio has no location at all, all three are null.
+    - Use null for anything not clearly stated.
     - Expand flag emoji to the country (🇧🇷 -> Brazil, 🇺🇸 -> United States, 🇰🇷 -> South Korea).
-    - Pick ONE primary location if several are listed (the first / home studio).
-    - Never treat @handles, emails, URLs, or phrases like "books closed" as locations.
+    - Pick ONE primary location and ONE primary shop (the home/resident studio if several).
+    - The shop is a studio handle (e.g. "@blackveiltattoo"), NOT the artist's own handle,
+      a booking email, a personal site, or a brand/supplier. If unsure it's a studio, use null.
+    - Phrases like "resident at @x", "working at @x", "tattooing at @x" -> shop @x.
+    - Never treat phrases like "books closed" as locations.
     - Output the JSON array and nothing else.
   TXT
 
@@ -107,12 +120,14 @@ class LocationExtractor
     Array(JSON.parse(json)).each_with_object({}) do |row, acc|
       next unless row.is_a?(Hash) && row["i"]
 
-      loc = Location.new(
+      ext = Extraction.new(
         city:    clean(row["city"]),
         region:  clean(row["region"]),
-        country: clean(row["country"])
+        country: clean(row["country"]),
+        shop:    Artist.normalize_handle(clean(row["shop"])),
+        role:    clean_role(row["role"])
       )
-      acc[row["i"].to_i] = loc.present? ? loc : nil
+      acc[row["i"].to_i] = (ext.location? || ext.shop?) ? ext : nil
     end
   rescue JSON::ParserError => e
     Rails.logger.warn("[LocationExtractor] unparseable response: #{e.message}")
@@ -124,5 +139,10 @@ class LocationExtractor
     return nil if s.blank? || s.casecmp?("null") || s.casecmp?("none") || s.casecmp?("n/a")
 
     s
+  end
+
+  def clean_role(value)
+    r = clean(value)&.downcase
+    ROLES.include?(r) ? r : nil
   end
 end
