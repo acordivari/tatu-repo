@@ -14,18 +14,47 @@ namespace :instagram do
     end
   end
 
-  desc "Scrape recent posts from @blackworkers via Apify and ingest them. Usage: rake instagram:scrape[1000]"
-  task :scrape, [:limit] => :environment do |_t, args|
+  desc "Scrape posts from @blackworkers via Apify and ingest them. Usage: rake instagram:scrape[1000] or scrape[3000,false] to skip images"
+  task :scrape, [:limit, :images] => :environment do |_t, args|
     limit = (args[:limit] || 1000).to_i
+    with_images = args[:images].to_s.downcase != "false"
     est = format("%.2f", limit / 1000.0 * 1.50)
     puts "Scraping up to #{limit} posts from @blackworkers via Apify (est. ~$#{est})…"
     items = ApifyClient.new.posts(username: "blackworkers", limit: limit)
-    puts "Fetched #{items.size} posts. Ingesting…"
-    report InstagramIngestor.new(items).call
+    puts "Fetched #{items.size} posts. Ingesting (parsing captions for artists)…"
+    # Images are a separate, observable, throttled pass (free — no Apify cost).
+    report InstagramIngestor.new(items, attach_images: false).call
+    if with_images
+      download_images
+    else
+      puts "Skipped image download. Run `rake instagram:download_images` when ready."
+    end
   rescue ApifyClient::NotConfigured
     abort "APIFY_TOKEN is not set. Add it to api/.env, or use rake instagram:ingest[path]."
   rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
     abort "Apify run failed: #{e.message}"
+  end
+
+  desc "Download + store images for posts that don't have one yet (throttled)."
+  task download_images: :environment do
+    download_images
+  end
+
+  desc "Enrich artists (profile -> bio/location -> geocode) via Apify. Usage: rake instagram:enrich[limit]"
+  task :enrich, [:limit] => :environment do |_t, args|
+    scope = Artist.where(enriched_at: nil)
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    artists = scope.to_a
+    cost = format("%.2f", artists.size / 1000.0 * 1.60)
+    puts "Enriching #{artists.size} artists via Apify (est. ~$#{cost})…"
+    ok = 0
+    artists.each_with_index do |artist, i|
+      EnrichArtistJob.perform_now(artist.id)
+      ok += 1 if artist.reload.enriched_at.present?
+      print "\r  #{i + 1}/#{artists.size} (located: #{Artist.located.count})"
+      sleep 0.3
+    end
+    puts "\nEnriched #{ok} artists. #{Artist.located.count} now have map coordinates."
   end
 
   desc "Ingest scraped posts from a local JSON file (Apify dataset export). Usage: rake instagram:ingest[path/to.json]"
@@ -61,5 +90,22 @@ namespace :instagram do
         artists created:  #{result.artists_created}
         unattributed:     #{result.unattributed}
     OUT
+  end
+
+  # Download + store images inline so a backfill is observable and complete.
+  # Throttled to stay non-disruptive to Instagram's CDN.
+  def download_images
+    pending = Post.needs_image.to_a
+    return puts("All posts already have stored images.") if pending.empty?
+
+    puts "Downloading #{pending.size} images (throttled)…"
+    ok = 0
+    pending.each_with_index do |post, i|
+      AttachPostImageJob.perform_now(post.id)
+      ok += 1 if post.reload.image.attached?
+      print "\r  #{i + 1}/#{pending.size} stored:#{ok}"
+      sleep 0.4
+    end
+    puts "\nStored #{ok}/#{pending.size} images (#{pending.size - ok} unavailable/expired)."
   end
 end

@@ -10,14 +10,25 @@ class Post < ApplicationRecord
 
   scope :recent,     -> { order(posted_at: :desc, id: :desc) }
   scope :attributed, -> { where.not(artist_id: nil) }
+  # Posts that have a source image URL but no stored copy yet.
+  scope :needs_image, -> { where.not(image_url: nil).where.missing(:image_attachment) }
 
   # The canonical "tattoo by @handle" attribution pattern used by the
   # @blackworkers feed. Tolerates "tattoo/tattoos/tat by", an optional
   # leading @, and surrounding punctuation/emoji.
+  # The @blackworkers feed credits the artist with a tattoo-specific lead-in
+  # followed by "by @handle". We match a known credit word (not generic verbs
+  # like "inspired"/"commissioned") to avoid mis-attributing the wrong handle.
   ATTRIBUTION_PATTERN = /
-    \b tat(?:too?)?s? \s+ by \s* :?  # "tattoo by", "tattoos by", "tat by"
-    \s* @?                            # optional @
-    ([a-z0-9._]{1,30})               # the handle
+    \b
+    (?:
+      tat(?:too?)?s?               # tattoo, tattoos, tat
+      | cover[\s\-]?ups?           # cover-up, coverup, cover up
+      | piece | freehand | lettering | linework | dotwork | design | healed
+    )
+    (?:\s+tattoos?)?               # optional "tattoo", e.g. "healed tattoo by"
+    \s+ by \s* :? \s* @?           # "by", optional colon, optional @
+    ([a-z0-9._]{1,30})            # the handle
   /ix
 
   # Extracts the artist handle from a caption, or nil if none is present.

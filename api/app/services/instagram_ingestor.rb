@@ -56,7 +56,8 @@ class InstagramIngestor
     if artist.new_record?
       artist.save!
       @result.artists_created += 1
-      EnrichArtistJob.perform_later(artist.id)
+      # Enrichment (per-artist profile scrape -> bio/location -> geocode) is an
+      # explicit, separately-billed step. Run `rake instagram:enrich` when ready.
     end
     artist
   end

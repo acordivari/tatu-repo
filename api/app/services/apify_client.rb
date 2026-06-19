@@ -18,7 +18,7 @@ class ApifyClient
   BASE = "https://api.apify.com/v2".freeze
   DEFAULT_ACTOR = "apify~instagram-scraper".freeze
   POLL_INTERVAL = 5         # seconds between status checks
-  DEFAULT_TIMEOUT = 900     # max seconds to wait for a run (15 min)
+  DEFAULT_TIMEOUT = 2400    # max seconds to wait for a run (40 min — covers a 3k backfill)
   PAGE_SIZE = 1000          # dataset items per request
 
   def initialize(token: self.class.token, actor: self.class.actor)
