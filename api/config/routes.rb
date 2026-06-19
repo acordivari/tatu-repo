@@ -13,6 +13,14 @@ Rails.application.routes.draw do
         end
       end
       resources :posts, only: %i[index show]
+
+      # Follow-list discovery review queue.
+      resources :candidates, only: %i[index], param: :handle do
+        member do
+          post :approve
+          post :reject
+        end
+      end
     end
   end
 end

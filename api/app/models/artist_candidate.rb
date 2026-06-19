@@ -17,6 +17,10 @@ class ArtistCandidate < ApplicationRecord
   scope :approved, -> { where(status: "approved") }
   scope :scraped,  -> { where.not(scraped_at: nil) }
 
+  def instagram_url
+    "https://www.instagram.com/#{handle}/"
+  end
+
   # Promote this candidate into the real directory, merging by handle and
   # recording the discovery source (corroboration if already present).
   def approve!

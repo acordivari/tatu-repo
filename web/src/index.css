@@ -146,3 +146,21 @@ img { display: block; }
 /* ---- Map ---- */
 .map-wrap { height: calc(100vh - 64px); width: 100%; }
 .maplibregl-popup-content { font-family: inherit; }
+
+/* ---- Review ---- */
+.review { max-width: 640px; }
+.review-progress { text-align: center; color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; }
+.review-tally { display: block; margin-top: 0.25rem; font-size: 0.78rem; }
+.review-card { border: 1px solid var(--ink); padding: 1.75rem; }
+.review-handle { font-size: 1.5rem; font-weight: 800; }
+.review-name { color: var(--muted); margin-top: 0.2rem; }
+.review-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.75rem 0; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.review-bio { white-space: pre-wrap; line-height: 1.5; min-height: 3rem; margin: 0.5rem 0 1rem; }
+.review-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; margin-top: 1.5rem; }
+.review-actions button { padding: 0.8rem; border: 1px solid var(--ink); background: var(--paper); cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.review-actions button:disabled { opacity: 0.4; cursor: default; }
+.btn-approve { background: var(--ink) !important; color: var(--paper); }
+.btn-reject:hover { background: #b00020; color: #fff; border-color: #b00020; }
+.btn-approve:hover { background: #0a7f3f !important; border-color: #0a7f3f; }
+.review-hint { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 1.25rem; }
+kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 0.3rem; font-size: 0.72rem; background: #fafafa; }

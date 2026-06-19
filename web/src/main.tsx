@@ -6,6 +6,7 @@ import "./index.css";
 import App from "./App";
 import Home from "./pages/Home";
 import ArtistPage from "./pages/ArtistPage";
+import Review from "./pages/Review";
 
 // Code-split the map route so MapLibre (~1MB) only loads when the map is opened.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: "artists/:handle", element: <ArtistPage /> },
+      { path: "review", element: <Review /> },
       {
         path: "map",
         element: (

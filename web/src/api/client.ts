@@ -2,6 +2,7 @@ import type {
   ArtistCard,
   ArtistDetail,
   ArtistMarker,
+  Candidate,
   PostCard,
   Paged,
   RegionFacets,
@@ -11,6 +12,12 @@ const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
+  return res.json() as Promise<T>;
+}
+
+async function postJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST" });
   if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
   return res.json() as Promise<T>;
 }
@@ -63,4 +70,15 @@ export const api = {
   }) => getJson<ArtistMarker[]>(`/artists/map${bounds ? toParams(bounds) : ""}`),
 
   regions: () => getJson<RegionFacets>(`/artists/regions`),
+
+  candidates: () =>
+    getJson<{ count: number; candidates: Candidate[] }>(`/candidates`),
+  approveCandidate: (handle: string) =>
+    postJson<{ status: string; handle: string }>(
+      `/candidates/${encodeURIComponent(handle)}/approve`
+    ),
+  rejectCandidate: (handle: string) =>
+    postJson<{ status: string; handle: string }>(
+      `/candidates/${encodeURIComponent(handle)}/reject`
+    ),
 };

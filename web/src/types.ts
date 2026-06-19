@@ -47,6 +47,18 @@ export interface RegionFacets {
   regions: Record<string, number>;
 }
 
+export interface Candidate {
+  handle: string;
+  name: string | null;
+  bio: string | null;
+  category: string | null;
+  followers_count: number | null;
+  posts_count: number | null;
+  confidence: number | null;
+  reason: string | null;
+  instagram_url: string;
+}
+
 export interface Paged<T> {
   items: T[];
   page: number;
