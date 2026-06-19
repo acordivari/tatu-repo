@@ -12,7 +12,11 @@ class LocationResolver
 
   def call
     signal = @artist.location_signals.ranked.first
-    return clear if signal.nil? || signal.query.blank?
+    return clear if signal.nil? || (signal.query.blank? && signal.shop&.latitude.blank?)
+
+    # A shop-backed signal already carries exact coordinates (e.g. Google
+    # Places) — use them directly instead of re-geocoding.
+    return apply_shop_location(signal) if signal.shop&.latitude.present?
 
     if up_to_date?(signal)
       backfill_provenance(signal)
@@ -38,6 +42,24 @@ class LocationResolver
   end
 
   private
+
+  # Inherit the shop's verified coordinates + address (no geocoding needed).
+  def apply_shop_location(signal)
+    shop = signal.shop
+    @artist.update_columns(
+      city:      signal.city.presence    || shop.city,
+      region:    signal.region.presence  || shop.region,
+      country:   signal.country.presence || shop.country,
+      latitude:  shop.latitude,
+      longitude: shop.longitude,
+      location_source:       signal.source_type,
+      location_confidence:   signal.confidence,
+      location_confirmed_at: signal.observed_at,
+      primary_shop_id:       shop.id,
+      updated_at: Time.current
+    )
+    Result.new(status: :located)
+  end
 
   # Already geocoded and the winning signal points at the same place — only the
   # provenance columns (new) may need backfilling; skip the network call.

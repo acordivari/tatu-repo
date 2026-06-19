@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_19_164360) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_19_171127) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -134,6 +134,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_164360) do
     t.datetime "profile_scraped_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "google_place_id"
+    t.string "business_status"
     t.index ["handle"], name: "index_shops_on_handle", unique: true
   end
 

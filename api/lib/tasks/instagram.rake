@@ -113,6 +113,59 @@ namespace :instagram do
     puts "\nDone. On map now: #{Artist.located.count}."
   end
 
+  desc "Resolve shops to verified Google Places businesses, then emit location signals. Usage: rake instagram:resolve_shops[limit]"
+  task :resolve_shops, [:limit] => :environment do |_t, args|
+    abort "GOOGLE_MAPS_API_KEY is not set. Add it to api/.env (see api/.env.example)." unless GooglePlacesResolver.configured?
+
+    scope = Shop.unresolved.joins(:memberships).distinct.order(Arel.sql("(SELECT COUNT(*) FROM memberships WHERE memberships.shop_id = shops.id) DESC"))
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    shops = scope.to_a
+    abort "No unresolved shops." if shops.empty?
+
+    resolver = GooglePlacesResolver.new
+    est = format("%.2f", shops.size * 0.04)
+    puts "Resolving #{shops.size} shops via Google Places (est. ~$#{est}, within $200/mo free credit)…"
+    matched = 0
+    shops.each_with_index do |shop, i|
+      place = resolver.lookup(shop_query(shop))
+      if place&.latitude
+        shop.update!(
+          name: place.name, google_place_id: place.place_id, business_status: place.business_status,
+          address_raw: place.formatted_address, city: place.city, region: place.region,
+          country: place.country, latitude: place.latitude, longitude: place.longitude,
+          profile_scraped_at: Time.current
+        )
+        emit_shop_signals(shop)
+        matched += 1
+      else
+        shop.update_columns(profile_scraped_at: Time.current, updated_at: Time.current)
+      end
+      print "\r  #{i + 1}/#{shops.size} matched:#{matched}"
+      sleep 0.1
+    end
+    puts "\nMatched #{matched}/#{shops.size} shops to Google businesses."
+    puts "Next: rake instagram:resolve_locations   (upgrade artists to their shop's verified location)"
+  end
+
+  # Build a Google query: shop handle/name + a city hint from a located member
+  # so we match the right business, not a same-named shop elsewhere.
+  def shop_query(shop)
+    member = shop.memberships.joins(:artist).merge(Artist.located).first&.artist
+    hint = member && [member.city, member.region, member.country].compact_blank.first(2).join(", ")
+    [shop.name.presence || shop.handle.tr("._", " "), "tattoo", hint].compact_blank.join(" ")
+  end
+
+  # One shop_google_places signal per member artist, carrying the shop's location.
+  def emit_shop_signals(shop)
+    shop.memberships.includes(:artist).find_each do |m|
+      sig = m.artist.location_signals.find_or_initialize_by(source_type: "shop_google_places", shop_id: shop.id)
+      sig.assign_attributes(city: shop.city, region: shop.region, country: shop.country,
+                            source_account: "google_places", observed_at: Time.current,
+                            raw: shop.address_raw.to_s[0, 255])
+      sig.save!
+    end
+  end
+
   desc "Geocode artists that have a location string but no coordinates (throttled). Usage: rake instagram:geocode[limit]"
   task :geocode, [:limit] => :environment do |_t, args|
     scope = Artist.awaiting_geocode
