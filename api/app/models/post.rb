@@ -24,9 +24,12 @@ class Post < ApplicationRecord
     (?:
       tat(?:too?)?s?               # tattoo, tattoos, tat
       | cover[\s\-]?ups?           # cover-up, coverup, cover up
+      | bodysuits?                 # bodysuit by @x
+      | collab(?:oration)?s?       # collaboration by @x
       | piece | freehand | lettering | linework | dotwork | design | healed
     )
     (?:\s+tattoos?)?               # optional "tattoo", e.g. "healed tattoo by"
+    (?:\s*\([^)]*\))?              # optional parenthetical, e.g. "Tattoo (filler) by"
     \s+ by \s* :? \s* @?           # "by", optional colon, optional @
     ([a-z0-9._]{1,30})            # the handle
   /ix
