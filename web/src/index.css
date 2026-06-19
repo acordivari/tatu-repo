@@ -1,0 +1,148 @@
+:root {
+  --ink: #0a0a0a;
+  --paper: #ffffff;
+  --muted: #6b6b6b;
+  --line: #e6e6e6;
+  --max: 1200px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; text-decoration: none; }
+img { display: block; }
+
+/* ---- Header ---- */
+.masthead {
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  z-index: 50;
+}
+.masthead-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 1.25rem;
+}
+.wordmark {
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+}
+.masthead nav {
+  display: flex;
+  gap: 1.25rem;
+  margin-left: auto;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.masthead nav a.active { border-bottom: 2px solid var(--ink); }
+
+/* ---- Search ---- */
+.searchbar {
+  display: flex;
+  border: 1px solid var(--ink);
+  flex: 1;
+  max-width: 420px;
+}
+.searchbar input {
+  border: 0;
+  outline: 0;
+  padding: 0.55rem 0.8rem;
+  flex: 1;
+  font-size: 0.9rem;
+}
+.searchbar button {
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0 1.1rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- Layout ---- */
+.page { max-width: var(--max); margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+.hero { text-align: center; padding: 2.5rem 1rem 1.5rem; }
+.hero h1 { font-size: 2rem; letter-spacing: 0.04em; margin: 0 0 0.5rem; }
+.hero p { color: var(--muted); margin: 0; }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.25rem 0 0.5rem;
+}
+.chip {
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  background: var(--paper);
+  text-transform: capitalize;
+}
+.chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ---- Post grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px;
+  margin-top: 1.5rem;
+}
+.tile { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #f2f2f2; }
+.tile img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
+.tile:hover img { transform: scale(1.04); }
+.tile .overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0.6rem 0.7rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  color: #fff;
+  font-size: 0.82rem;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.tile:hover .overlay { opacity: 1; }
+
+/* ---- Artist cards ---- */
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.artist-card { border: 1px solid var(--line); padding: 1rem; transition: border-color 0.2s; }
+.artist-card:hover { border-color: var(--ink); }
+.artist-card .handle { font-weight: 700; }
+.artist-card .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.3rem; }
+.artist-card .count { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 0.6rem; color: var(--muted); }
+
+/* ---- Artist detail ---- */
+.artist-head { padding: 1.5rem 0; border-bottom: 1px solid var(--line); }
+.artist-head h1 { margin: 0; font-size: 1.8rem; }
+.artist-head .sub { color: var(--muted); margin-top: 0.4rem; }
+.ig-link { display: inline-block; margin-top: 0.8rem; border: 1px solid var(--ink); padding: 0.4rem 0.9rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* ---- States ---- */
+.notice { text-align: center; color: var(--muted); padding: 3rem 1rem; }
+.pager { display: flex; justify-content: center; gap: 1rem; margin-top: 2rem; align-items: center; }
+.pager button { border: 1px solid var(--ink); background: var(--paper); padding: 0.4rem 1rem; cursor: pointer; }
+.pager button:disabled { opacity: 0.3; cursor: default; }
+
+/* ---- Map ---- */
+.map-wrap { height: calc(100vh - 64px); width: 100%; }
+.maplibregl-popup-content { font-family: inherit; }

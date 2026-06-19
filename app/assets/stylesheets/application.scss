@@ -1,0 +1,80 @@
+ //
+ // * This is a manifest file that'll be compiled into application.css, which will include all the files
+ // * listed below.
+ // *
+ // * Any CSS and SCSS file within this directory, lib/assets/stylesheets, vendor/assets/stylesheets,
+ // * or any plugin's vendor/assets/stylesheets directory can be referenced here using a relative path.
+ // *
+ // * You're free to add application-wide styles to this file and they'll appear at the bottom of the
+ // * compiled file so the styles you add here take precedence over styles defined in any other CSS/SCSS
+ // * files in this directory. Styles in this file should be added after the last require_* statement.
+ // * It is generally better to create a new file per style scope.
+ // *
+ @import url('https://fonts.googleapis.com/css?family=Six+Caps');
+ $six-caps: 'Six Caps', sans-serif;
+
+ @import "bootstrap";
+
+ .test {
+  width: 350px;
+}
+
+ h4 {
+  font-family: $six-caps;
+  color: #D3D3D3;
+}
+
+#ideaContent, body {
+
+  margin: 20px;
+
+  background-color: black;
+  font: rgba(0,0,0,0);
+}
+
+#tatbtns,  {
+  padding: 10px 0px 0px 0px;
+  background-color: black;
+  text-align: center;
+}
+
+#document {
+  background-color: black;
+  font-style: Six Caps;
+}
+center {
+  padding: 20px 0 0 0;
+}
+  img{
+    -webkit-transition:all .5s ease;}
+    img:hover{
+      transform: scale(1.1)};
+
+html {
+  background-color: black;
+  font-style: Six Caps;
+}
+
+.nav-link {
+  margin-top: 20px;
+  padding: 0 20px 0 20px;
+}
+
+.form-inline {
+  margin-top: 20px;
+}
+
+nav {
+  padding: 0;
+}
+p {
+  color: #D3D3D3;
+}
+
+.text-field {
+  width: 4em;
+  float: left;
+  text-align: right;
+  margin-right: 0.5em;
+  display: block
+}

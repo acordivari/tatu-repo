@@ -1,0 +1,24 @@
+
+  <div id="document">
+    <center><img src="http://i.imgur.com/GmDPeAh.png" title="source: imgur.com" /></center>
+      <center><h4> Instagram acccount curated by @caspermugridge </h4>
+
+        <% @posts.each do |post| %>
+            <div class="col-sm-12 col-md-4">
+              <div>
+                <%= image_tag post.image, height: 400, width: 400 unless post.image.blank?  %>
+                <div id="tatbtns">
+                  <p> <%= post.Instagram %> </p>
+                  <a href=<%= post.link %> class="btn btn-info">Learn More  </a>
+
+                  <% unless current_user.favorite_posts.exists?(id: @post.id) %>
+                   <button type="button" class="btn btn-success"><%= link_to 'Favorite', favorite_posts_path(post_id: @post),  style: 'color:#FFFFFF', method: :post %></button>
+                  <% else %>
+                   <button type="button" class="btn btn-danger"><%= link_to 'Delete', favorite_post_path(@post),  style: 'color:#FFFFFF', method: :delete %></button>
+
+                    <!-- change 'take a look back to 'favorite' when model relationship is complete -->
+                </div>
+              </div>
+            </div>
+        <% end %>
+      </div>

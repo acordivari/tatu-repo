@@ -1,0 +1,26 @@
+
+<center><div class="m-x-auto newuser" style="width: 400px;">
+<div class="card">
+  <div class="card-block">
+    <% if @user.id == current_user.id %>
+      <%= form_for @user do |f| %>
+      <div id="editform">
+        <div class="row">
+        Name:<%= f.text_field :full_name, :class => "editform", placeholder: "Full Name" %>
+        </div>
+        <div class="row">
+          City:&nbsp &nbsp<%= f.text_field :current_city, :class => "editform", placeholder: "Current City" %>
+        </div>
+        <div class="row">
+        Email: <%= f.text_field :email, :class => "editform", placeholder: "Email" %>
+        </div>
+
+        <center><%= f.submit "Save User Changes" %>
+      <% end %>
+    <% else %>
+      Something messed up :(
+    <% end %>
+  </div>
+  </div>
+</div>
+</div>

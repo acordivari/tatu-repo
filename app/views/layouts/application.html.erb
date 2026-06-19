@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>BlackworkersApp</title>
+    <%= csrf_meta_tags %>
+    <%= stylesheet_link_tag    'application', media: 'all', 'data-turbolinks-track': 'reload' %>
+    <%= javascript_include_tag 'application', 'data-turbolinks-track': 'reload' %>
+  </head>
+
+
+    <body>
+      <nav class="navbar navbar-light bg-faded">
+    <a class="navbar-brand" href="/"><img src="http://i.imgur.com/mjrYMQes.png"></a>
+    <ul class="nav navbar-nav">
+
+      <% if current_user %>
+      <li class="nav-item">
+        <a class="nav-link" <%= link_to "Profile", user_path(current_user)%></a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" <%= link_to "Logout", logout_path %></a>
+      </li>
+      <% else %>
+      <li class="nav-item">
+        <a class="nav-link" href="/users/new">Sign Up</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="/login">Login</a>
+      </li>
+      <% end %>
+
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" href="http://example.com" id="supportedContentDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">About</a>
+        <div class="dropdown-menu" aria-labelledby="supportedContentDropdown">
+          <a class="dropdown-item" href="/theidea">About the Idea</a>
+          <a class="dropdown-item" href="/artists">Artist Index</a>
+          <a class="dropdown-item" href="#">Something else here</a>
+        </div>
+      </li>
+    </ul>
+    <form class="form-inline float-xs-right" name="search" action="/posts" method='get'>
+      <input class="search-control" type="text" placeholder="Search">
+      <button class="btn btn-outline-success" type="submit">Search</button>
+    </form>
+    <!-- <%= form_tag(posts_path, :method => "get", id: "search-form") do %>
+    <%= text_field_tag :search, params[:search], placeholder: "Search Posts" %>
+    <%= submit_tag "Search", :name => nil %>
+      <% end %> -->
+  </nav>
+
+
+    <%= yield %>
+  </body>
+</html>

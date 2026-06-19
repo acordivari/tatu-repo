@@ -1,0 +1,20 @@
+<center><div class="m-x-auto newuser" style="width: 400px;"><center>
+<div class="card">
+  <div class="card-block">
+  <% if @user.id == current_user.id %>
+
+  <h2><%= @user.full_name%></h2>
+  <br>
+  <h3>Favorite Artists:</h3>
+  
+  <br>
+  Joined <%= @user.created_at.localtime.to_formatted_s(:long_ordinal) %>
+  <% if @user == current_user %>
+    <%= button_to "Edit Profile", edit_user_path, method: "get" %>
+  <% end %><abbr title=""></abbr>
+  <% end %>
+
+  <br>
+  </div>
+</div>
+</div>
