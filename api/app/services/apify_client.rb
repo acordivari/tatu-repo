@@ -41,26 +41,26 @@ class ApifyClient
     )
   end
 
-  # Scrape a single artist profile's details for enrichment.
-  def profile(handle)
+  # Scrape MANY artist profiles in a single run (the efficient path for bulk
+  # enrichment). Returns normalized profile hashes keyed by handle.
+  def profiles(handles, timeout: DEFAULT_TIMEOUT)
+    handles = Array(handles).map { |h| Artist.normalize_handle(h) }.compact.uniq
+    return [] if handles.empty?
+
     items = run(
       {
-        directUrls:   ["https://www.instagram.com/#{handle}/"],
+        directUrls:   handles.map { |h| "https://www.instagram.com/#{h}/" },
         resultsType:  "details",
-        resultsLimit: 1
+        resultsLimit: handles.size
       },
-      timeout: 180
+      timeout: timeout
     )
-    detail = items.first
-    return nil if detail.blank?
+    items.filter_map { |raw| normalize_profile(raw) }
+  end
 
-    d = detail.with_indifferent_access
-    {
-      full_name: d[:fullName],
-      biography: d[:biography],
-      website:   d[:externalUrl] || d[:website],
-      location:  d.dig(:businessAddress, :city_name) || d[:locationName]
-    }
+  # Convenience: scrape a single profile (delegates to the batch path).
+  def profile(handle)
+    profiles([handle], timeout: 180).first
   end
 
   def self.token
@@ -73,6 +73,22 @@ class ApifyClient
   end
 
   private
+
+  # Map an Apify profile-detail item onto our canonical keys.
+  def normalize_profile(raw)
+    d = raw.with_indifferent_access
+    handle = Artist.normalize_handle(d[:username] || d[:ownerUsername] || d[:inputUrl].to_s[%r{instagram\.com/([^/?]+)}, 1])
+    return nil if handle.blank?
+
+    {
+      handle:    handle,
+      full_name: d[:fullName].presence,
+      biography: d[:biography].presence,
+      website:   (d[:externalUrl] || d[:website]).presence,
+      # Business accounts expose a structured city; otherwise we parse the bio.
+      location:  (d.dig(:businessAddress, :city_name) || d[:locationName] || d[:city_name]).presence
+    }
+  end
 
   # Start a run, wait for it to finish, then return all dataset items.
   def run(input, timeout:)

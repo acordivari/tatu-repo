@@ -40,6 +40,11 @@ gem "httparty"
 # Load APIFY_TOKEN and other secrets from api/.env in development/test
 gem "dotenv-rails", groups: %i[development test]
 
+# Claude API — extract structured locations from freeform artist bios
+gem "anthropic"
+# Pin to the 2.x line: connection_pool 3.x requires Ruby 3.4 (we're on 3.3).
+gem "connection_pool", "~> 2.5"
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"

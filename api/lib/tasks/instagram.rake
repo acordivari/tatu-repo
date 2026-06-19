@@ -40,21 +40,80 @@ namespace :instagram do
     download_images
   end
 
-  desc "Enrich artists (profile -> bio/location -> geocode) via Apify. Usage: rake instagram:enrich[limit]"
-  task :enrich, [:limit] => :environment do |_t, args|
-    scope = Artist.where(enriched_at: nil)
+  desc "Enrich artists (profiles -> bio/location) via Apify, batched. Usage: rake instagram:enrich[limit,batch]"
+  task :enrich, %i[limit batch] => :environment do |_t, args|
+    batch_size = (args[:batch].presence || 200).to_i
+    scope = Artist.unenriched.order(posts_count: :desc)
     scope = scope.limit(args[:limit].to_i) if args[:limit].present?
     artists = scope.to_a
-    cost = format("%.2f", artists.size / 1000.0 * 1.60)
-    puts "Enriching #{artists.size} artists via Apify (est. ~$#{cost})…"
-    ok = 0
-    artists.each_with_index do |artist, i|
-      EnrichArtistJob.perform_now(artist.id)
-      ok += 1 if artist.reload.enriched_at.present?
-      print "\r  #{i + 1}/#{artists.size} (located: #{Artist.located.count})"
-      sleep 0.3
+    abort "No un-enriched artists." if artists.empty?
+
+    puts "Enriching #{artists.size} artists in batches of #{batch_size} via Apify…"
+    totals = { fetched: 0, updated: 0, with_location: 0 }
+    artists.each_slice(batch_size).with_index do |batch, i|
+      r = ArtistEnricher.new(batch).call
+      totals.each_key { |k| totals[k] += r[k] }
+      puts "  batch #{i + 1}: fetched #{r.fetched}/#{batch.size}, " \
+           "with location: #{r.with_location} (running total #{totals[:with_location]})"
     end
-    puts "\nEnriched #{ok} artists. #{Artist.located.count} now have map coordinates."
+    puts "\nDone. Profiles fetched: #{totals[:fetched]}, with a location string: #{totals[:with_location]}."
+    puts "Next: rake instagram:geocode   (turns location strings into map coordinates)"
+  rescue ApifyClient::NotConfigured
+    abort "APIFY_TOKEN is not set. Add it to api/.env."
+  rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
+    abort "Apify run failed: #{e.message}"
+  end
+
+  desc "Extract structured locations from artist bios via Claude. Usage: rake instagram:extract_locations[limit]"
+  task :extract_locations, [:limit] => :environment do |_t, args|
+    abort "ANTHROPIC_API_KEY is not set. Add it to api/.env (see api/.env.example)." unless LocationExtractor.configured?
+
+    scope = Artist.needs_location_extraction.order(posts_count: :desc)
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    artists = scope.to_a
+    abort "No artists need location extraction." if artists.empty?
+
+    extractor = LocationExtractor.new
+    puts "Extracting locations for #{artists.size} artists via Claude (#{LocationExtractor::MODEL})…"
+    found = 0
+    # Process in chunks so progress + cost are saved incrementally.
+    artists.each_slice(100) do |chunk|
+      locations = extractor.extract(chunk.map(&:bio))
+      chunk.each_with_index do |artist, i|
+        loc = locations[i]
+        if loc&.present?
+          # LLM is authoritative; reset coords so the geocode pass re-resolves.
+          artist.update_columns(
+            city: loc.city, region: loc.region, country: loc.country,
+            location_raw: loc.to_query, latitude: nil, longitude: nil,
+            location_extracted_at: Time.current, updated_at: Time.current
+          )
+          found += 1
+        else
+          artist.update_columns(location_extracted_at: Time.current, updated_at: Time.current)
+        end
+      end
+      print "\r  processed #{[artists.index(chunk.last) + 1, artists.size].min}/#{artists.size}, with location: #{found}, cost so far: $#{extractor.cost_usd.round(3)}"
+    end
+    puts "\nDone. #{found}/#{artists.size} got a location. Cost: $#{extractor.cost_usd.round(3)}."
+    puts "Next: rake instagram:geocode   (turns locations into map coordinates)"
+  end
+
+  desc "Geocode artists that have a location string but no coordinates (throttled). Usage: rake instagram:geocode[limit]"
+  task :geocode, [:limit] => :environment do |_t, args|
+    scope = Artist.awaiting_geocode
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    artists = scope.to_a
+    abort "Nothing awaiting geocoding." if artists.empty?
+
+    puts "Geocoding #{artists.size} artists (throttled ~1/sec for Nominatim policy)…"
+    located = 0
+    artists.each_with_index do |artist, i|
+      located += 1 if artist.resolve_location!
+      print "\r  #{i + 1}/#{artists.size} located:#{located}"
+      sleep 1.1
+    end
+    puts "\nGeocoded #{located}/#{artists.size}. Total on map now: #{Artist.located.count}."
   end
 
   desc "Ingest scraped posts from a local JSON file (Apify dataset export). Usage: rake instagram:ingest[path/to.json]"

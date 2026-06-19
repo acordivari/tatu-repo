@@ -5,21 +5,12 @@ class Artist < ApplicationRecord
 
   before_validation { self.handle = self.class.normalize_handle(handle) }
 
-  # Geocode the artist's location text into lat/lng AND normalized
-  # city/region/country (so the directory can be filtered by geography).
-  # Runs only when there's a query and it hasn't already been resolved.
-  geocoded_by :geocode_query do |artist, results|
-    if (geo = results.first)
-      artist.latitude  = geo.latitude
-      artist.longitude = geo.longitude
-      artist.city    = geo.city            if artist.city.blank?
-      artist.region  = geo.state           if artist.region.blank?
-      artist.country = geo.country         if artist.country.blank?
-    end
-  end
-  after_validation :geocode, if: :geocodable?
-
   scope :located,    -> { where.not(latitude: nil, longitude: nil) }
+  scope :unenriched, -> { where(enriched_at: nil) }
+  # Has a bio but hasn't had its location extracted by the LLM yet.
+  scope :needs_location_extraction, -> { where.not(bio: [nil, ""]).where(location_extracted_at: nil) }
+  # Has a location string but hasn't been geocoded to coordinates yet.
+  scope :awaiting_geocode, -> { where.not(location_raw: [nil, ""]).where(latitude: nil) }
   scope :in_country, ->(c) { where("LOWER(country) = ?", c.to_s.downcase) }
   scope :in_region,  ->(r) { where("LOWER(region) = ?", r.to_s.downcase) }
 
@@ -52,8 +43,21 @@ class Artist < ApplicationRecord
     [city, region, country].compact_blank.join(", ").presence || location_raw
   end
 
-  # Only geocode when there's a location to resolve and we haven't already.
-  def geocodable?
-    geocode_query.present? && latitude.blank?
+  # Resolve location_raw into coordinates + normalized city/region/country.
+  # Returns true if it landed on a real place. Uses update_columns so it can
+  # run in a throttled pass without re-triggering validations/callbacks.
+  def resolve_location!
+    result = NominatimGeocoder.lookup(geocode_query)
+    return false if result.nil?
+
+    update_columns(
+      latitude:  result.latitude,
+      longitude: result.longitude,
+      city:      city.presence    || result.city,
+      region:    region.presence  || result.region,
+      country:   country.presence || result.country,
+      updated_at: Time.current
+    )
+    true
   end
 end

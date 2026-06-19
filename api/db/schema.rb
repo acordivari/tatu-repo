@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_19_010129) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_19_034439) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -58,6 +58,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_010129) do
     t.datetime "enriched_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "location_extracted_at"
     t.index ["country"], name: "index_artists_on_country"
     t.index ["handle"], name: "index_artists_on_handle", unique: true
     t.index ["latitude", "longitude"], name: "index_artists_on_latitude_and_longitude"

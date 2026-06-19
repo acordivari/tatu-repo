@@ -1,23 +1,43 @@
-# Extracts a likely location phrase from freeform Instagram bio text so the
-# geocoder has something clean to resolve. Bios are messy ("📍 Berlin |
-# bookings ⬇️"), so this is heuristic: pull the text near a pin emoji or a
-# "City, Country" pattern, falling back to the first comma-separated phrase.
+# Extracts a clean, geocodable location phrase from a freeform Instagram bio.
 #
-# It sets artist.location_raw only; the model's geocode hook turns that into
-# normalized city/region/country + coordinates.
+# Tattoo bios are messy ("🇧🇷 São Paulo / SP", "📍 @studio", "based in Denver co",
+# "MILANO", "Books Closed. Calgary, AB"). This pulls the best location candidate
+# using several ordered strategies and rejects non-places (@handles, emails,
+# URLs). The model's geocode pass then validates it against Nominatim, so a
+# slightly loose candidate is fine — a wrong one is filtered out by geocoding.
 class LocationParser
-  PIN = /[📍🌍🌎🌏🏠🇺🇸]/.freeze
-  # "City, ST" or "City, Country" — letters/spaces, comma, letters.
-  CITY_COUNTRY = /([A-Z][a-zA-Z.\-]+(?:\s[A-Z][a-zA-Z.\-]+)*,\s*[A-Z][a-zA-Z.\-]+)/.freeze
+  PINS = /[📍🌍🌎🌏🏠⛩️]/.freeze
+
+  # Flag emoji -> country name (regional-indicator pairs decoded to ISO-3166).
+  FLAG_COUNTRIES = {
+    "US" => "USA", "GB" => "United Kingdom", "CA" => "Canada", "BR" => "Brazil",
+    "DE" => "Germany", "FR" => "France", "IT" => "Italy", "ES" => "Spain",
+    "PT" => "Portugal", "NL" => "Netherlands", "BE" => "Belgium", "CH" => "Switzerland",
+    "AT" => "Austria", "PL" => "Poland", "SE" => "Sweden", "NO" => "Norway",
+    "DK" => "Denmark", "FI" => "Finland", "IE" => "Ireland", "RU" => "Russia",
+    "UA" => "Ukraine", "JP" => "Japan", "KR" => "South Korea", "CN" => "China",
+    "TW" => "Taiwan", "TH" => "Thailand", "ID" => "Indonesia", "PH" => "Philippines",
+    "AU" => "Australia", "NZ" => "New Zealand", "MX" => "Mexico", "AR" => "Argentina",
+    "CL" => "Chile", "CO" => "Colombia", " ZA" => "South Africa", "GR" => "Greece",
+    "CZ" => "Czechia", "RO" => "Romania", "HU" => "Hungary", "TR" => "Turkey",
+    "IL" => "Israel", "SG" => "Singapore", "KH" => "Cambodia"
+  }.freeze
+
+  # "based in X", Portuguese "em X", Spanish/Italian "en/in X".
+  BASED_IN = /\b(?:based\s+in|located\s+in|tatuador[ae]?\s+em|tattoo(?:er|ist)?\s+in|em|en)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\- ]{2,30})/i.freeze
+
+  # "City, Region/Country" or "City - Country" / "City / Country".
+  CITY_SEP = /([A-Z][A-Za-zÀ-ÿ.'\-]+(?:\s+[A-Z][A-Za-zÀ-ÿ.'\-]+){0,2})\s*[,\/\-]\s*([A-Z][A-Za-zÀ-ÿ.'\-]{1,20})/.freeze
 
   def initialize(text)
-    @text = text.to_s
+    @raw = text.to_s
+    @clean = scrub(@raw)
   end
 
   def location
-    return if @text.blank?
+    return if @clean.blank?
 
-    near_pin || city_country_phrase
+    from_pin || from_city_sep || from_based_in || from_flag
   end
 
   def apply_to(artist)
@@ -28,14 +48,64 @@ class LocationParser
 
   private
 
-  # Text immediately following a pin emoji, up to a line break or separator.
-  def near_pin
-    return unless @text =~ PIN
-
-    @text.split(PIN, 2).last.to_s[/\A[^\n|•·\-—]+/].to_s.strip.presence
+  # Remove emails, URLs, @handles, hashtags — never valid locations.
+  def scrub(text)
+    text.dup
+        .gsub(/\S+@\S+\.\S+/, " ")           # emails
+        .gsub(%r{https?://\S+|www\.\S+}i, " ") # urls
+        .gsub(/[@#]\w+/, " ")                  # handles / hashtags
+        .gsub(/\s+/, " ")
+        .strip
   end
 
-  def city_country_phrase
-    @text[CITY_COUNTRY, 1]&.strip
+  # Text right after a pin emoji, stopped at a separator or sentence break.
+  def from_pin
+    return unless @raw =~ PINS
+
+    candidate = @raw.split(PINS, 2).last.to_s
+                    .gsub(/[@#]\w+/, "")
+                    .strip[/\A[^\n|•·✈️✆☎️:;]+/]
+                    .to_s.strip
+    cleanup(candidate)
+  end
+
+  def from_city_sep
+    return unless (m = @clean.match(CITY_SEP))
+
+    cleanup("#{m[1]}, #{m[2]}")
+  end
+
+  def from_based_in
+    return unless (m = @clean.match(BASED_IN))
+
+    cleanup(m[1])
+  end
+
+  # A flag emoji gives the country; pair it with nearby capitalized words.
+  def from_flag
+    country = flag_country(@raw)
+    return if country.nil?
+
+    # Words adjacent to the flag, if any look like a place.
+    city = @raw.gsub(/[@#]\w+/, "")[/[A-Z][A-Za-zÀ-ÿ.'\- ]{2,30}/]&.strip
+    city && city.length > 2 ? cleanup("#{city}, #{country}") : country
+  end
+
+  def flag_country(text)
+    text.scan(/[\u{1F1E6}-\u{1F1FF}]{2}/).each do |flag|
+      code = flag.chars.map { |c| (c.codepoints.first - 0x1F1E6 + 65).chr }.join
+      return FLAG_COUNTRIES[code] if FLAG_COUNTRIES[code]
+    end
+    nil
+  end
+
+  # Final tidy: trim trailing punctuation/filler, reject obvious non-places.
+  def cleanup(str)
+    s = str.to_s.gsub(/\s+/, " ").strip.sub(/[\s,.\-\/]+\z/, "").sub(/\A[\s,.\-\/]+/, "")
+    return nil if s.length < 3 || s.length > 40
+    # Reject phrases that are clearly not a place.
+    return nil if s.match?(/\b(books?|open|closed|email|booking|dm|appointments?|inquiries|guest|spot)\b/i)
+
+    s
   end
 end
