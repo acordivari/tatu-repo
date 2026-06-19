@@ -14,13 +14,14 @@ Rails.application.routes.draw do
       end
       resources :posts, only: %i[index show]
 
-      # Follow-list discovery review queue.
-      resources :candidates, only: %i[index], param: :handle do
-        member do
-          post :approve
-          post :reject
-        end
-      end
+      # Follow-list discovery review queue. Handles can contain dots
+      # (e.g. felipecesar.me), so constrain :handle to "anything but a slash"
+      # and disable format parsing — otherwise Rails truncates at the dot.
+      get "candidates", to: "candidates#index"
+      post "candidates/:handle/approve", to: "candidates#approve",
+           constraints: { handle: %r{[^/]+} }, format: false
+      post "candidates/:handle/reject", to: "candidates#reject",
+           constraints: { handle: %r{[^/]+} }, format: false
     end
   end
 end

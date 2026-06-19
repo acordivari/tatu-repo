@@ -14,6 +14,7 @@ export default function Review() {
   const [i, setI] = useState(0);
   const [acted, setActed] = useState({ approved: 0, rejected: 0, skipped: 0 });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Seed the local queue when data arrives (or is refetched for more).
   useEffect(() => {
@@ -29,12 +30,15 @@ export default function Review() {
     async (action: "approve" | "reject" | "skip") => {
       if (!current || busy) return;
       setBusy(true);
+      setError(null);
       try {
         if (action === "approve") await api.approveCandidate(current.handle);
         if (action === "reject") await api.rejectCandidate(current.handle);
         const key = { approve: "approved", reject: "rejected", skip: "skipped" } as const;
         setActed((a) => ({ ...a, [key[action]]: a[key[action]] + 1 }));
         setI((n) => n + 1);
+      } catch {
+        setError(`Couldn't ${action} @${current.handle}. It stayed in the queue — try again.`);
       } finally {
         setBusy(false);
       }
@@ -110,6 +114,10 @@ export default function Review() {
           {current.confidence != null && <span>conf {current.confidence.toFixed(2)}</span>}
         </div>
         <p className="review-bio">{current.bio || <em>(no bio)</em>}</p>
+
+        {error && (
+          <p style={{ color: "#b00020", fontSize: "0.85rem" }}>{error}</p>
+        )}
 
         <a className="ig-link" href={current.instagram_url} target="_blank" rel="noreferrer">
           Open on Instagram ↗ (O)
