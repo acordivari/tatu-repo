@@ -41,6 +41,23 @@ class ApifyClient
     )
   end
 
+  # Scrape recent posts FROM specific profiles (their own work). Returns raw
+  # post items (each carries ownerUsername for owner-based attribution).
+  def posts_for(handles, per_user: 6, timeout: DEFAULT_TIMEOUT)
+    handles = Array(handles).map { |h| Artist.normalize_handle(h) }.compact.uniq
+    return [] if handles.empty?
+
+    run(
+      {
+        directUrls:    handles.map { |h| "https://www.instagram.com/#{h}/" },
+        resultsType:   "posts",
+        resultsLimit:  per_user, # per profile
+        addParentData: true      # include ownerUsername on each post
+      },
+      timeout: timeout
+    )
+  end
+
   # Scrape MANY artist profiles in a single run (the efficient path for bulk
   # enrichment). Returns normalized profile hashes keyed by handle.
   def profiles(handles, timeout: DEFAULT_TIMEOUT)
@@ -86,7 +103,11 @@ class ApifyClient
       biography: d[:biography].presence,
       website:   (d[:externalUrl] || d[:website]).presence,
       # Business accounts expose a structured city; otherwise we parse the bio.
-      location:  (d.dig(:businessAddress, :city_name) || d[:locationName] || d[:city_name]).presence
+      location:  (d.dig(:businessAddress, :city_name) || d[:locationName] || d[:city_name]).presence,
+      category:    (d[:businessCategoryName] || d[:categoryName]).presence,
+      is_business: d[:isBusinessAccount],
+      posts_count: d[:postsCount] || d[:igtvVideoCount],
+      followers_count: d[:followersCount]
     }
   end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_19_171127) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_19_200611) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -42,6 +42,28 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_171127) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "artist_candidates", force: :cascade do |t|
+    t.string "handle", null: false
+    t.string "source"
+    t.string "full_name"
+    t.text "bio"
+    t.string "category"
+    t.integer "followers_count"
+    t.integer "posts_count"
+    t.string "classification"
+    t.float "confidence"
+    t.text "reason"
+    t.string "status"
+    t.bigint "artist_id"
+    t.datetime "scraped_at"
+    t.datetime "classified_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id"], name: "index_artist_candidates_on_artist_id"
+    t.index ["handle"], name: "index_artist_candidates_on_handle", unique: true
+    t.index ["status"], name: "index_artist_candidates_on_status"
+  end
+
   create_table "artists", force: :cascade do |t|
     t.string "handle", null: false
     t.string "name"
@@ -63,11 +85,13 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_171127) do
     t.float "location_confidence"
     t.datetime "location_confirmed_at"
     t.bigint "primary_shop_id"
+    t.string "sources", default: [], null: false, array: true
     t.index ["country"], name: "index_artists_on_country"
     t.index ["handle"], name: "index_artists_on_handle", unique: true
     t.index ["latitude", "longitude"], name: "index_artists_on_latitude_and_longitude"
     t.index ["primary_shop_id"], name: "index_artists_on_primary_shop_id"
     t.index ["region"], name: "index_artists_on_region"
+    t.index ["sources"], name: "index_artists_on_sources", using: :gin
   end
 
   create_table "location_signals", force: :cascade do |t|
@@ -141,6 +165,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_171127) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "artist_candidates", "artists"
   add_foreign_key "artists", "shops", column: "primary_shop_id"
   add_foreign_key "location_signals", "artists"
   add_foreign_key "location_signals", "shops"

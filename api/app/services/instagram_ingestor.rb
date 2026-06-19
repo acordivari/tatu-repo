@@ -13,9 +13,14 @@
 class InstagramIngestor
   Result = Struct.new(:posts_created, :posts_updated, :artists_created, :unattributed, keyword_init: true)
 
-  def initialize(items, attach_images: true)
+  # attribute_by: :caption parses "tattoo by @handle" (aggregator reposts);
+  #               :owner attributes the post to the account it was scraped from
+  #               (an artist's own posts, which never credit themselves).
+  def initialize(items, attach_images: true, attribute_by: :caption, source_account: "blackworkers")
     @items = Array(items)
     @attach_images = attach_images
+    @attribute_by = attribute_by
+    @source_account = source_account
     @result = Result.new(posts_created: 0, posts_updated: 0, artists_created: 0, unattributed: 0)
   end
 
@@ -29,7 +34,7 @@ class InstagramIngestor
   def ingest_one(item)
     return if item[:shortcode].blank?
 
-    artist = resolve_artist(item[:caption])
+    artist = @attribute_by == :owner ? resolve_owner(item[:owner]) : resolve_artist(item[:caption])
     @result.unattributed += 1 if artist.nil?
 
     post = Post.find_or_initialize_by(ig_shortcode: item[:shortcode])
@@ -62,6 +67,20 @@ class InstagramIngestor
     artist
   end
 
+  # Attribute a post to the artist whose account it was scraped from.
+  def resolve_owner(owner_handle)
+    handle = Artist.normalize_handle(owner_handle)
+    return nil if handle.blank?
+
+    artist = Artist.find_or_initialize_by(handle: handle)
+    if artist.new_record?
+      artist.sources = [@source_account]
+      artist.save!
+      @result.artists_created += 1
+    end
+    artist
+  end
+
   # Map varied Apify/fixture key names onto our canonical keys.
   def normalize(raw)
     h = raw.with_indifferent_access
@@ -70,7 +89,8 @@ class InstagramIngestor
       caption:    h[:caption] || h[:text],
       url:        h[:url] || h[:postUrl],
       image_url:  h[:displayUrl] || h[:imageUrl] || h[:image_url] || first_image(h[:images]),
-      posted_at:  parse_time(h[:timestamp] || h[:takenAt] || h[:posted_at])
+      posted_at:  parse_time(h[:timestamp] || h[:takenAt] || h[:posted_at]),
+      owner:      h[:ownerUsername] || h[:owner_username] || h.dig(:owner, :username)
     }
   end
 
