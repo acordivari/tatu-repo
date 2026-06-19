@@ -117,18 +117,20 @@ namespace :instagram do
   task :resolve_shops, [:limit] => :environment do |_t, args|
     abort "GOOGLE_MAPS_API_KEY is not set. Add it to api/.env (see api/.env.example)." unless GooglePlacesResolver.configured?
 
-    scope = Shop.unresolved.joins(:memberships).distinct.order(Arel.sql("(SELECT COUNT(*) FROM memberships WHERE memberships.shop_id = shops.id) DESC"))
+    # Most-shared shops first (resolving them helps the most artists).
+    scope = Shop.unresolved.joins(:memberships).group("shops.id").order(Arel.sql("COUNT(memberships.id) DESC"))
     scope = scope.limit(args[:limit].to_i) if args[:limit].present?
     shops = scope.to_a
     abort "No unresolved shops." if shops.empty?
 
     resolver = GooglePlacesResolver.new
-    est = format("%.2f", shops.size * 0.04)
-    puts "Resolving #{shops.size} shops via Google Places (est. ~$#{est}, within $200/mo free credit)…"
+    puts "Resolving #{shops.size} shops via Google Places (Text Search; within free tier)…"
     matched = 0
+    rejected = 0
     shops.each_with_index do |shop, i|
-      place = resolver.lookup(shop_query(shop))
-      if place&.latitude
+      member = located_member(shop)
+      place = resolver.lookup(shop_query(shop, member))
+      if place && ShopPlaceVerifier.new(shop, place, member).accept?
         shop.update!(
           name: place.name, google_place_id: place.place_id, business_status: place.business_status,
           address_raw: place.formatted_address, city: place.city, region: place.region,
@@ -138,19 +140,24 @@ namespace :instagram do
         emit_shop_signals(shop)
         matched += 1
       else
+        # Mark attempted (no re-bill) but DON'T trust an unverified/false match.
+        rejected += 1 if place
         shop.update_columns(profile_scraped_at: Time.current, updated_at: Time.current)
       end
-      print "\r  #{i + 1}/#{shops.size} matched:#{matched}"
+      print "\r  #{i + 1}/#{shops.size} matched:#{matched} rejected:#{rejected}"
       sleep 0.1
     end
-    puts "\nMatched #{matched}/#{shops.size} shops to Google businesses."
+    puts "\nMatched #{matched}/#{shops.size} shops (#{rejected} matches rejected as false/unverifiable)."
     puts "Next: rake instagram:resolve_locations   (upgrade artists to their shop's verified location)"
+  end
+
+  def located_member(shop)
+    shop.memberships.joins(:artist).merge(Artist.located).first&.artist
   end
 
   # Build a Google query: shop handle/name + a city hint from a located member
   # so we match the right business, not a same-named shop elsewhere.
-  def shop_query(shop)
-    member = shop.memberships.joins(:artist).merge(Artist.located).first&.artist
+  def shop_query(shop, member = nil)
     hint = member && [member.city, member.region, member.country].compact_blank.first(2).join(", ")
     [shop.name.presence || shop.handle.tr("._", " "), "tattoo", hint].compact_blank.join(" ")
   end
