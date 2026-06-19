@@ -17,7 +17,7 @@ two-part full-stack application:
 blackworkers/
 ├── api/        Rails 8 · Ruby 3.3 · PostgreSQL · Active Storage   (JSON API)
 ├── web/        React + TypeScript · Vite · React Query · MapLibre (SPA)
-└── (legacy)    Original Rails 5 app files, kept at root as reference
+└── legacy/     Original 2016 Rails 5 app, kept for reference only
 ```
 
 - **No authentication** — the directory is fully public and searchable.
@@ -74,15 +74,18 @@ coordinates so search, filtering, and the map all work offline out of the box.
 
 Scraping uses [Apify's Instagram Scraper](https://apify.com/apify/instagram-scraper),
 which operates proxies and rate-limiting (low operational/ToS risk; returns captions).
+Cost is ~**$1.50 per 1,000 posts**, and Apify's free plan includes **$5/month in
+credits** — enough for an initial 1,000–3,000-post backfill.
 
 ```bash
-# Set your token (ENV or Rails credentials)
-export APIFY_TOKEN=apify_api_xxx
+# 1. Get a token at https://console.apify.com/account/integrations
+cp api/.env.example api/.env        # then paste APIFY_TOKEN=... into api/.env
 
 cd api
-rake instagram:scrape[1000]          # scrape + ingest last 1000 posts from @blackworkers
-rake instagram:ingest[posts.json]    # OR ingest a local Apify JSON export
-rake instagram:import_legacy         # bootstrap handles from the old app's seed data
+rake instagram:verify               # confirm the token works (free, no scraping)
+rake instagram:scrape[1000]         # scrape + ingest last 1000 posts (prints cost estimate)
+rake instagram:ingest[posts.json]   # OR ingest a local Apify JSON export (no token needed)
+rake instagram:import_legacy        # bootstrap handles from the old app's seed data
 ```
 
 The pipeline: **scrape posts → parse `tattoo by @handle` → upsert Artist →

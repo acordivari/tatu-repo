@@ -37,6 +37,9 @@ gem "geocoder"
 # HTTP client for ingesting scraped data (Apify) and enriching artist profiles
 gem "httparty"
 
+# Load APIFY_TOKEN and other secrets from api/.env in development/test
+gem "dotenv-rails", groups: %i[development test]
+
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
