@@ -4,7 +4,7 @@ import { api } from "../api/client";
 import type { Candidate } from "../types";
 
 export default function Review() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["candidates"],
     queryFn: api.candidates,
     staleTime: Infinity,
@@ -15,9 +15,12 @@ export default function Review() {
   const [acted, setActed] = useState({ approved: 0, rejected: 0, skipped: 0 });
   const [busy, setBusy] = useState(false);
 
-  // Seed the local queue once the data arrives.
+  // Seed the local queue when data arrives (or is refetched for more).
   useEffect(() => {
-    if (data?.candidates) setQueue(data.candidates);
+    if (data?.candidates) {
+      setQueue(data.candidates);
+      setI(0);
+    }
   }, [data]);
 
   const current = queue[i];
@@ -63,10 +66,21 @@ export default function Review() {
     return (
       <div className="page review">
         <div className="notice">
-          <h2>Review complete 🖤</h2>
+          <h2>Queue clear 🖤</h2>
           <p>
             {acted.approved} approved · {acted.rejected} rejected · {acted.skipped} skipped
-            {total === 0 && " — nothing in the queue yet (classification may still be running)."}
+          </p>
+          <p style={{ marginTop: "1rem" }}>
+            More may still be classifying in the background.
+            <br />
+            <button
+              className="chip"
+              style={{ marginTop: "0.75rem" }}
+              disabled={isFetching}
+              onClick={() => refetch()}
+            >
+              {isFetching ? "Checking…" : "Check for more candidates"}
+            </button>
           </p>
         </div>
       </div>
