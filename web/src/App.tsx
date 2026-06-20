@@ -38,6 +38,7 @@ export default function App() {
             <NavLink to="/" end>
               Artists
             </NavLink>
+            <NavLink to="/shops">Studios</NavLink>
             <NavLink to="/map">Map</NavLink>
             <NavLink to="/review">Review</NavLink>
           </nav>

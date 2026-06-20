@@ -55,10 +55,11 @@ module Api
       private
 
       def find_artist
+        scope = Artist.includes(memberships: :shop)
         if params[:id].to_s.match?(/\A\d+\z/)
-          Artist.find(params[:id])
+          scope.find(params[:id])
         else
-          Artist.find_by!(handle: Artist.normalize_handle(params[:id]))
+          scope.find_by!(handle: Artist.normalize_handle(params[:id]))
         end
       end
 

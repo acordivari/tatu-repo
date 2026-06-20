@@ -2,6 +2,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { ArtistCard } from "../types";
+import BookingNote from "../components/BookingNote";
 
 function Card({ a }: { a: ArtistCard }) {
   const place = [a.city, a.region, a.country].filter(Boolean).join(", ");
@@ -70,6 +71,8 @@ export default function Home() {
           <p>An encyclopedia of tattooing — find an artist near you.</p>
         </div>
       )}
+
+      {!q && <BookingNote context="home" />}
 
       {topCountries.length > 0 && (
         <div className="filters">

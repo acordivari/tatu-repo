@@ -3,7 +3,7 @@
 # signals that let us trust a shop as the artist's present location.
 class Membership < ApplicationRecord
   belongs_to :artist
-  belongs_to :shop
+  belongs_to :shop, counter_cache: true
 
   ROLES = %w[owner resident working guest unknown].freeze
 

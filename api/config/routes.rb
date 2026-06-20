@@ -14,6 +14,12 @@ Rails.application.routes.draw do
       end
       resources :posts, only: %i[index show]
 
+      # Shops directory + pages. Like artists, :id may be a numeric id or a
+      # handle; handles can contain dots (e.g. felipe.tattoo), so constrain to
+      # "anything but a slash" and disable format parsing.
+      get "shops", to: "shops#index"
+      get "shops/:id", to: "shops#show", constraints: { id: %r{[^/]+} }, format: false
+
       # Follow-list discovery review queue. Handles can contain dots
       # (e.g. felipecesar.me), so constrain :handle to "anything but a slash"
       # and disable format parsing — otherwise Rails truncates at the dot.

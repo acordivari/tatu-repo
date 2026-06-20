@@ -6,6 +6,8 @@ import type {
   PostCard,
   Paged,
   RegionFacets,
+  ShopCard,
+  ShopDetail,
 } from "../types";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
@@ -72,6 +74,12 @@ export const api = {
   // Pass a country to also get that country's region facet (scoped + deduped).
   regions: (country?: string) =>
     getJson<RegionFacets>(`/artists/regions${toParams({ country })}`),
+
+  shops: (query: { q?: string; country?: string; page?: number } = {}) =>
+    getPaged<ShopCard>(`/shops${toParams(query)}`),
+
+  shop: (handleOrId: string) =>
+    getJson<ShopDetail>(`/shops/${encodeURIComponent(handleOrId)}`),
 
   candidates: () =>
     getJson<{ count: number; candidates: Candidate[] }>(`/candidates`),

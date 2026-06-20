@@ -30,14 +30,40 @@ class ArtistSerializer
     }
   end
 
-  # Full representation for the artist detail page (includes recent posts).
+  # Full representation for the artist detail page (includes recent posts and
+  # the studio(s) the artist works at, so the profile can point visitors to the
+  # right shop page for booking).
   def as_detail(posts: [])
     as_card.merge(
       bio:          @artist.bio,
       website:      @artist.website,
       location_raw: @artist.location_raw,
+      shops:        artist_shops,
       posts:        posts.map { |p| PostSerializer.new(p).as_card }
     )
+  end
+
+  # The artist's shop memberships, primary studio first, then current ones, then
+  # by confidence. Each entry links to its shop page and carries the role.
+  def artist_shops
+    @artist.memberships
+           .sort_by { |m| [m.shop_id == @artist.primary_shop_id ? 0 : 1, m.current ? 0 : 1, -(m.confidence || 0)] }
+           .map do |m|
+             shop = m.shop
+             {
+               handle:          shop.handle,
+               name:            shop.name.presence || "@#{shop.handle}",
+               city:            shop.city,
+               region:          shop.region,
+               country:         shop.country,
+               instagram_url:   shop.instagram_url,
+               business_status: shop.business_status,
+               located:         shop.latitude.present?,
+               role:            m.role,
+               current:         m.current,
+               primary:         m.shop_id == @artist.primary_shop_id
+             }
+           end
   end
 
   # Thumbnail for the directory: the artist's most recent post image.

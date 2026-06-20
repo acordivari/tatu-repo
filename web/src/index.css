@@ -172,6 +172,101 @@ img { display: block; }
 .artist-head .sub { color: var(--muted); margin-top: 0.4rem; }
 .ig-link { display: inline-block; margin-top: 0.8rem; border: 1px solid var(--ink); padding: 0.4rem 0.9rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
 
+/* ---- Booking etiquette note ---- */
+.booking-note {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink);
+  background: #fafafa;
+  padding: 0.85rem 1rem;
+  margin: 1.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.booking-note-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+.booking-note p { margin: 0; color: var(--ink); }
+.inline-link { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---- Artist page: studio chips ---- */
+.section-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0.9rem 0 0.4rem;
+}
+.artist-shops { margin-top: 0.6rem; }
+.shop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--ink);
+  padding: 0.35rem 0.7rem;
+  margin: 0 0.4rem 0.4rem 0;
+  font-size: 0.82rem;
+}
+.shop-chip:hover { background: var(--ink); color: var(--paper); }
+.shop-chip-role { color: var(--muted); text-transform: capitalize; }
+.shop-chip:hover .shop-chip-role { color: #cfcfcf; }
+
+/* ---- Shop page ---- */
+.shop-head { padding: 1.5rem 0; border-bottom: 1px solid var(--line); }
+.shop-head h1 { margin: 0.3rem 0 0; font-size: 1.8rem; display: inline-block; }
+.shop-head .sub { color: var(--muted); margin-top: 0.4rem; }
+.shop-links { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.section-title { font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 1.5rem 0 0.75rem; }
+.role-badge {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0.1rem 0.4rem;
+}
+.status-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  vertical-align: middle;
+}
+.status-badge.closed { background: var(--ink); color: var(--paper); }
+.status-badge.warn { border: 1px solid var(--ink); }
+.status-badge.small { font-size: 0.6rem; margin-left: 0.4rem; padding: 0.05rem 0.35rem; }
+
+/* ---- Shops directory ---- */
+.shop-search {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.shop-card { border: 1px solid var(--line); padding: 1rem; transition: border-color 0.2s; }
+.shop-card:hover { border-color: var(--ink); }
+.shop-card-name { font-weight: 700; }
+.shop-card .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.3rem; }
+.shop-card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 0.6rem; }
+.shop-card .count { font-size: 0.8rem; color: var(--muted); }
+
 /* ---- States ---- */
 .notice { text-align: center; color: var(--muted); padding: 3rem 1rem; }
 .pager { display: flex; justify-content: center; gap: 1rem; margin-top: 2rem; align-items: center; }

@@ -10,6 +10,10 @@ class Shop < ApplicationRecord
 
   scope :unresolved, -> { where(profile_scraped_at: nil) }
   scope :located,    -> { where.not(latitude: nil, longitude: nil) }
+  scope :search, ->(q) {
+    t = "%#{sanitize_sql_like(q.to_s.strip)}%"
+    where("name ILIKE :t OR handle ILIKE :t OR city ILIKE :t", t: t)
+  }
 
   def instagram_url
     "https://www.instagram.com/#{handle}/"

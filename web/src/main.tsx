@@ -6,6 +6,8 @@ import "./index.css";
 import App from "./App";
 import Home from "./pages/Home";
 import ArtistPage from "./pages/ArtistPage";
+import ShopPage from "./pages/ShopPage";
+import ShopsPage from "./pages/ShopsPage";
 import Review from "./pages/Review";
 
 // Code-split the map route so MapLibre (~1MB) only loads when the map is opened.
@@ -22,6 +24,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: "artists/:handle", element: <ArtistPage /> },
+      { path: "shops", element: <ShopsPage /> },
+      { path: "shops/:handle", element: <ShopPage /> },
       { path: "review", element: <Review /> },
       {
         path: "map",

@@ -24,11 +24,54 @@ export interface PostCard {
   artist_handle: string | null;
 }
 
+// A studio the artist works at, as shown on the artist profile.
+export interface ArtistShop {
+  handle: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  instagram_url: string;
+  business_status: string | null;
+  located: boolean;
+  role: string | null;
+  current: boolean | null;
+  primary: boolean;
+}
+
 export interface ArtistDetail extends ArtistCard {
   bio: string | null;
   website: string | null;
   location_raw: string | null;
+  shops: ArtistShop[];
   posts: PostCard[];
+}
+
+export interface ShopCard {
+  id: number;
+  handle: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  instagram_url: string;
+  business_status: string | null;
+  members_count: number;
+  located: boolean;
+}
+
+// A roster member on a shop page (an artist card + their role at the shop).
+export interface ShopArtist extends ArtistCard {
+  role: string | null;
+  current: boolean | null;
+}
+
+export interface ShopDetail extends ShopCard {
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  maps_url: string | null;
+  artists: ShopArtist[];
 }
 
 export interface ArtistMarker {
