@@ -1,0 +1,55 @@
+# Render Blueprint — Rails API + managed Postgres for Tatu.
+# Apply via the Render dashboard: New → Blueprint → connect this repo.
+# Secrets marked `sync: false` must be filled in the dashboard after creation
+# (see DEPLOY.md). The SPA is hosted separately on Netlify (netlify.toml).
+services:
+  - type: web
+    name: tatu-api
+    runtime: docker
+    rootDir: api
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /up
+    # Run Puma directly on Render's $PORT (bypasses thruster, which expects :80).
+    # The Docker entrypoint runs `rails db:prepare` on boot, so migrations apply
+    # automatically on deploy.
+    dockerCommand: ./bin/rails server -b 0.0.0.0
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      - key: RAILS_MAX_THREADS
+        value: "5"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Secret — paste the contents of api/config/master.key
+      - key: RAILS_MASTER_KEY
+        sync: false
+      # Secret — your Netlify site URL(s), comma-separated, no trailing slash
+      #   e.g. https://tatu.netlify.app
+      - key: FRONTEND_ORIGINS
+        sync: false
+      # Cloudflare R2 credentials (Active Storage). Secrets.
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      # Wired automatically from the managed database below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tatu-db
+          property: connectionString
+
+databases:
+  - name: tatu-db
+    plan: basic-256mb
+    region: oregon
+    databaseName: api_production
+    user: api

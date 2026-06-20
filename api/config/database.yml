@@ -78,17 +78,11 @@ test:
 # Read https://guides.rubyonrails.org/configuring.html#configuring-a-database
 # for a full overview on how database connection configuration can be specified.
 #
+# A single managed Postgres on Render, via DATABASE_URL. This app does no
+# background work at serve time, so we use an in-process cache + Active Job
+# adapter (see config/environments/production.rb) rather than the Solid
+# Queue/Cache databases the Rails generator scaffolds.
 production:
-  primary: &primary_production
+  primary:
     <<: *default
-    database: api_production
-    username: api
-    password: <%= ENV["API_DATABASE_PASSWORD"] %>
-  cache:
-    <<: *primary_production
-    database: api_production_cache
-    migrations_paths: db/cache_migrate
-  queue:
-    <<: *primary_production
-    database: api_production_queue
-    migrations_paths: db/queue_migrate
+    url: <%= ENV["DATABASE_URL"] %>

@@ -1,0 +1,19 @@
+# Netlify build for the React/Vite SPA in web/.
+# Set VITE_API_URL in the Netlify dashboard (Site settings → Environment) to
+# your Render API base, INCLUDING the version path, e.g.
+#   https://tatu-api.onrender.com/api/v1
+# It's read at build time and inlined into the bundle.
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Client-side routing: serve index.html for any non-asset path so deep links
+# like /shops/bangbangnyc work on refresh.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
