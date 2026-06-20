@@ -6,6 +6,12 @@ class ArtistSerializer
     @artist = artist
   end
 
+  # Show the canonical region label when we have one, so what a user sees
+  # matches the value they filtered on (raw `region` stays for provenance).
+  def display_region
+    @artist.region_canonical.presence || @artist.region
+  end
+
   # Compact card representation for grids and search results.
   def as_card
     {
@@ -14,7 +20,7 @@ class ArtistSerializer
       name:          @artist.name,
       shop_name:     @artist.shop_name,
       city:          @artist.city,
-      region:        @artist.region,
+      region:        display_region,
       country:       @artist.country,
       latitude:      @artist.latitude,
       longitude:     @artist.longitude,
@@ -50,7 +56,7 @@ class ArtistSerializer
       handle:    @artist.handle,
       name:      @artist.name,
       city:      @artist.city,
-      region:    @artist.region,
+      region:    display_region,
       country:   @artist.country,
       latitude:  @artist.latitude,
       longitude: @artist.longitude

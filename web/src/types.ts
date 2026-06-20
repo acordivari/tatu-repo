@@ -44,7 +44,8 @@ export interface ArtistMarker {
 
 export interface RegionFacets {
   countries: Record<string, number>;
-  regions: Record<string, number>;
+  // Only present (and scoped to the selected country) when a country is given.
+  regions?: Record<string, number>;
 }
 
 export interface Candidate {

@@ -9,19 +9,24 @@ class Artist < ApplicationRecord
 
   before_validation { self.handle = self.class.normalize_handle(handle) }
 
+  # Effective region for faceting/filtering: the canonical label when present,
+  # else the raw scraped region. The facet and the filter MUST use this same
+  # expression so they always agree (see ArtistsController#regions / in_region).
+  REGION_KEY = Arel.sql("COALESCE(NULLIF(region_canonical, ''), region)")
+
   scope :located,    -> { where.not(latitude: nil, longitude: nil) }
   scope :unenriched, -> { where(enriched_at: nil) }
   # Has a bio but hasn't had its location extracted by the LLM yet.
   scope :needs_location_extraction, -> { where.not(bio: [nil, ""]).where(location_extracted_at: nil) }
   scope :in_country, ->(c) { where("LOWER(country) = ?", c.to_s.downcase) }
-  scope :in_region,  ->(r) { where("LOWER(region) = ?", r.to_s.downcase) }
+  scope :in_region,  ->(r) { where("LOWER(#{REGION_KEY.to_s}) = ?", r.to_s.strip.downcase) }
 
   # Text search across handle, name, shop, and location.
   scope :search, ->(q) {
     term = "%#{sanitize_sql_like(q.to_s.strip)}%"
     where(
       "handle ILIKE :t OR name ILIKE :t OR shop_name ILIKE :t OR " \
-      "city ILIKE :t OR region ILIKE :t OR country ILIKE :t",
+      "city ILIKE :t OR region ILIKE :t OR region_canonical ILIKE :t OR country ILIKE :t",
       t: term
     )
   }

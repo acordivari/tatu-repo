@@ -69,7 +69,9 @@ export const api = {
     ne_lng: number;
   }) => getJson<ArtistMarker[]>(`/artists/map${bounds ? toParams(bounds) : ""}`),
 
-  regions: () => getJson<RegionFacets>(`/artists/regions`),
+  // Pass a country to also get that country's region facet (scoped + deduped).
+  regions: (country?: string) =>
+    getJson<RegionFacets>(`/artists/regions${toParams({ country })}`),
 
   candidates: () =>
     getJson<{ count: number; candidates: Candidate[] }>(`/candidates`),

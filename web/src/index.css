@@ -95,6 +95,25 @@ img { display: block; }
   text-transform: capitalize;
 }
 .chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.chip.clear { color: var(--muted); }
+
+.subfilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0.25rem 0 0.5rem;
+}
+.region-select {
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
 
 /* ---- Post grid ---- */
 .grid {

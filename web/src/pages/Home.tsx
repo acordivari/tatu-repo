@@ -29,7 +29,11 @@ export default function Home() {
   const region = params.get("region") ?? "";
   const page = Number(params.get("page") ?? 1);
 
-  const facets = useQuery({ queryKey: ["regions"], queryFn: api.regions });
+  // Region facet is country-scoped: refetch when the active country changes.
+  const facets = useQuery({
+    queryKey: ["regions", country],
+    queryFn: () => api.regions(country || undefined),
+  });
 
   const artists = useQuery({
     queryKey: ["artists", { q, country, region, page }],
@@ -45,7 +49,18 @@ export default function Home() {
     setParams(next);
   };
 
+  // Selecting a country resets the region — regions are scoped to one country.
+  const selectCountry = (name: string) => {
+    const next = new URLSearchParams(params);
+    if (name) next.set("country", name);
+    else next.delete("country");
+    next.delete("region");
+    next.delete("page");
+    setParams(next);
+  };
+
   const topCountries = Object.entries(facets.data?.countries ?? {}).slice(0, 12);
+  const regionFacet = Object.entries(facets.data?.regions ?? {});
 
   return (
     <div className="page">
@@ -60,7 +75,7 @@ export default function Home() {
         <div className="filters">
           <button
             className={`chip ${!country ? "active" : ""}`}
-            onClick={() => setParam("country", "")}
+            onClick={() => selectCountry("")}
           >
             All
           </button>
@@ -68,11 +83,34 @@ export default function Home() {
             <button
               key={name}
               className={`chip ${country === name ? "active" : ""}`}
-              onClick={() => setParam("country", country === name ? "" : name)}
+              onClick={() => selectCountry(country === name ? "" : name)}
             >
               {name} ({count})
             </button>
           ))}
+        </div>
+      )}
+
+      {country && regionFacet.length > 0 && (
+        <div className="subfilters">
+          <select
+            className="region-select"
+            value={region}
+            onChange={(e) => setParam("region", e.target.value)}
+            aria-label={`Filter ${country} by region`}
+          >
+            <option value="">All regions in {country}</option>
+            {regionFacet.map(([name, count]) => (
+              <option key={name} value={name}>
+                {name} ({count})
+              </option>
+            ))}
+          </select>
+          {region && (
+            <button className="chip clear" onClick={() => setParam("region", "")}>
+              Clear region ✕
+            </button>
+          )}
         </div>
       )}
 

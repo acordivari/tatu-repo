@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_06_19_200611) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_20_211246) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -86,6 +86,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_06_19_200611) do
     t.datetime "location_confirmed_at"
     t.bigint "primary_shop_id"
     t.string "sources", default: [], null: false, array: true
+    t.string "region_canonical"
+    t.index ["country", "region_canonical"], name: "index_artists_on_country_and_region_canonical"
     t.index ["country"], name: "index_artists_on_country"
     t.index ["handle"], name: "index_artists_on_handle", unique: true
     t.index ["latitude", "longitude"], name: "index_artists_on_latitude_and_longitude"

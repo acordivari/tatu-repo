@@ -33,12 +33,23 @@ module Api
         render json: artists.limit(2000).map { |a| ArtistSerializer.new(a).as_marker }
       end
 
-      # GET /api/v1/artists/regions — facet counts for filter UI.
+      # GET /api/v1/artists/regions[?country=] — facet counts for the filter UI.
+      # Countries are always returned (the top-level chips). Regions are only
+      # meaningful within a country ("Victoria" exists in several), so the region
+      # facet is returned ONLY when a country is given, scoped to it, and keyed by
+      # the canonical region label so variants (CA/California) collapse to one row.
       def regions
-        render json: {
-          countries: Artist.where.not(country: nil).group(:country).order(Arel.sql("COUNT(*) DESC")).count,
-          regions:   Artist.where.not(region: nil).group(:region).order(Arel.sql("COUNT(*) DESC")).count
+        facets = {
+          countries: Artist.where.not(country: [nil, ""])
+                           .group(:country).order(Arel.sql("COUNT(*) DESC")).count
         }
+        if params[:country].present?
+          facets[:regions] = Artist.in_country(params[:country])
+                                   .where.not(region: [nil, ""])
+                                   .group(Artist::REGION_KEY)
+                                   .order(Arel.sql("COUNT(*) DESC")).count
+        end
+        render json: facets
       end
 
       private

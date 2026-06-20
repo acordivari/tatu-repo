@@ -113,6 +113,36 @@ namespace :instagram do
     puts "\nDone. On map now: #{Artist.located.count}."
   end
 
+  desc "Canonicalize artists' region strings (dedupe CA/California, Québec/Quebec, Москва/Moscow) via Claude. Usage: rake instagram:canonicalize_regions[force]"
+  task :canonicalize_regions, [:force] => :environment do |_t, args|
+    abort "ANTHROPIC_API_KEY is not set." unless RegionCanonicalizer.configured?
+
+    scope = Artist.where.not(region: [nil, ""])
+    scope = scope.where(region_canonical: [nil, ""]) unless args[:force] == "force"
+    # Distinct (country, region) pairs — we pay Claude once per pair, then fan
+    # the result out to every artist sharing it.
+    pairs = scope.distinct.pluck(:country, :region)
+    abort "No regions need canonicalization. (Pass [force] to redo all.)" if pairs.empty?
+
+    puts "Canonicalizing #{pairs.size} distinct (country, region) pairs via Claude (#{RegionCanonicalizer::MODEL})…"
+    canon = RegionCanonicalizer.new
+    mapping = canon.canonicalize(pairs)
+
+    updated = 0
+    changed = 0
+    mapping.each do |(country, region), label|
+      rel = Artist.where(region: region)
+      rel = country.nil? ? rel.where(country: nil) : rel.where(country: country)
+      n = rel.update_all(region_canonical: label, updated_at: Time.current)
+      updated += n
+      changed += n if label.to_s.casecmp(region.to_s) != 0
+    end
+    puts "\nDone. #{pairs.size} pairs -> canonical labels; #{updated} artists updated " \
+         "(#{changed} got a different label). Distinct regions now: " \
+         "#{Artist.where.not(region_canonical: [nil, '']).distinct.count(:region_canonical)}. " \
+         "Cost: $#{canon.cost_usd.round(4)}."
+  end
+
   desc "Resolve shops to verified Google Places businesses, then emit location signals. Usage: rake instagram:resolve_shops[limit]"
   task :resolve_shops, [:limit] => :environment do |_t, args|
     abort "GOOGLE_MAPS_API_KEY is not set. Add it to api/.env (see api/.env.example)." unless GooglePlacesResolver.configured?
