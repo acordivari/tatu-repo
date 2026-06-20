@@ -55,3 +55,9 @@ group :development, :test do
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
 end
+
+group :test do
+  # Block real HTTP in tests so the suite stays fast, offline, and deterministic
+  # (no live Apify / Nominatim / Google / Claude calls).
+  gem "webmock"
+end
