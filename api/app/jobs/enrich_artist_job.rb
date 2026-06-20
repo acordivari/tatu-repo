@@ -13,27 +13,24 @@ class EnrichArtistJob < ApplicationJob
 
     ArtistEnricher.new([artist]).call
     artist.reload
-    extract_location(artist)
-    artist.reload.resolve_location! if artist.latitude.blank? && artist.location_raw.present?
+    extract_location(artist)            # bio -> evidence-ledger signals
+    LocationResolver.new(artist.reload).call  # ledger -> resolved coords (single source of truth)
   rescue ApifyClient::NotConfigured
     Rails.logger.info("[EnrichArtistJob] APIFY_TOKEN not set; skipping #{artist&.handle}")
   end
 
   private
 
+  # Mirror the bulk `instagram:extract_locations` path: turn the bio into ledger
+  # signals (+ shop membership) via ArtistSignalBuilder rather than writing
+  # location columns directly. LocationResolver then picks the best signal.
   def extract_location(artist)
     return unless LocationExtractor.configured?
     return if artist.bio.blank? || artist.location_extracted_at.present?
 
     loc = LocationExtractor.new.extract([artist.bio]).first
-    if loc&.present?
-      artist.update_columns(
-        city: loc.city, region: loc.region, country: loc.country,
-        location_raw: loc.to_query, location_extracted_at: Time.current, updated_at: Time.current
-      )
-    else
-      artist.update_columns(location_extracted_at: Time.current, updated_at: Time.current)
-    end
+    ArtistSignalBuilder.new(artist, loc).call if loc
+    artist.update_columns(location_extracted_at: Time.current, updated_at: Time.current)
   rescue LocationExtractor::NotConfigured
     nil
   end

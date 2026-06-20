@@ -57,7 +57,7 @@ namespace :instagram do
            "with location: #{r.with_location} (running total #{totals[:with_location]})"
     end
     puts "\nDone. Profiles fetched: #{totals[:fetched]}, with a location string: #{totals[:with_location]}."
-    puts "Next: rake instagram:geocode   (turns location strings into map coordinates)"
+    puts "Next: rake instagram:extract_locations   (bio -> evidence ledger -> coordinates)"
   rescue ApifyClient::NotConfigured
     abort "APIFY_TOKEN is not set. Add it to api/.env."
   rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
@@ -173,22 +173,9 @@ namespace :instagram do
     end
   end
 
-  desc "Geocode artists that have a location string but no coordinates (throttled). Usage: rake instagram:geocode[limit]"
-  task :geocode, [:limit] => :environment do |_t, args|
-    scope = Artist.awaiting_geocode
-    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
-    artists = scope.to_a
-    abort "Nothing awaiting geocoding." if artists.empty?
-
-    puts "Geocoding #{artists.size} artists (throttled ~1/sec for Nominatim policy)…"
-    located = 0
-    artists.each_with_index do |artist, i|
-      located += 1 if artist.resolve_location!
-      print "\r  #{i + 1}/#{artists.size} located:#{located}"
-      sleep 1.1
-    end
-    puts "\nGeocoded #{located}/#{artists.size}. Total on map now: #{Artist.located.count}."
-  end
+  # NOTE: the legacy `instagram:geocode` task was removed — geocoding now happens
+  # through the evidence ledger via `instagram:resolve_locations` (which calls
+  # LocationResolver, the single source of truth for artist coordinates).
 
   desc "Ingest scraped posts from a local JSON file (Apify dataset export). Usage: rake instagram:ingest[path/to.json]"
   task :ingest, [:path] => :environment do |_t, args|
