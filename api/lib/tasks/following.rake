@@ -85,7 +85,7 @@ namespace :following do
       # Attribute by the account scraped (their own work), NOT by caption —
       # an artist's own posts don't credit themselves.
       r = InstagramIngestor.new(items, attach_images: true, attribute_by: :owner,
-                                source_account: "personal_following").call
+                                source_account: "personal_following", create_missing: false).call
       ingested += r.posts_created
       print "\r  posts ingested: #{ingested}"
     end

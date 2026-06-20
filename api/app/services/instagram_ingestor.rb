@@ -16,11 +16,17 @@ class InstagramIngestor
   # attribute_by: :caption parses "tattoo by @handle" (aggregator reposts);
   #               :owner attributes the post to the account it was scraped from
   #               (an artist's own posts, which never credit themselves).
-  def initialize(items, attach_images: true, attribute_by: :caption, source_account: "blackworkers")
+  # create_missing: whether owner-attribution may create a new Artist for an
+  # unseen owner. False for fetch_work — a scraped gallery can contain
+  # collaborative posts owned by tagged studios/conventions we don't track,
+  # and we don't want those slipping past the review gate.
+  def initialize(items, attach_images: true, attribute_by: :caption,
+                 source_account: "blackworkers", create_missing: true)
     @items = Array(items)
     @attach_images = attach_images
     @attribute_by = attribute_by
     @source_account = source_account
+    @create_missing = create_missing
     @result = Result.new(posts_created: 0, posts_updated: 0, artists_created: 0, unattributed: 0)
   end
 
@@ -35,6 +41,10 @@ class InstagramIngestor
     return if item[:shortcode].blank?
 
     artist = @attribute_by == :owner ? resolve_owner(item[:owner]) : resolve_artist(item[:caption])
+    # In owner mode, skip posts whose owner we don't track (collaborative/tagged
+    # posts) rather than orphaning them or auto-creating junk artists.
+    return if @attribute_by == :owner && artist.nil?
+
     @result.unattributed += 1 if artist.nil?
 
     post = Post.find_or_initialize_by(ig_shortcode: item[:shortcode])
@@ -72,12 +82,12 @@ class InstagramIngestor
     handle = Artist.normalize_handle(owner_handle)
     return nil if handle.blank?
 
-    artist = Artist.find_or_initialize_by(handle: handle)
-    if artist.new_record?
-      artist.sources = [@source_account]
-      artist.save!
-      @result.artists_created += 1
-    end
+    artist = Artist.find_by(handle: handle)
+    return artist if artist
+    return nil unless @create_missing
+
+    artist = Artist.create!(handle: handle, sources: [@source_account])
+    @result.artists_created += 1
     artist
   end
 
