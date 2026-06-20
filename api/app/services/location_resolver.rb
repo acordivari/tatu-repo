@@ -26,9 +26,11 @@ class LocationResolver
     geo = NominatimGeocoder.lookup(signal.query)
     return write_without_coords(signal) if geo.nil?
 
+    region = signal.region.presence || geo.region
     @artist.update_columns(
       city:      signal.city.presence    || geo.city,
-      region:    signal.region.presence  || geo.region,
+      region:    region,
+      region_canonical: canonical_for(region),
       country:   signal.country.presence || geo.country,
       latitude:  geo.latitude,
       longitude: geo.longitude,
@@ -43,12 +45,21 @@ class LocationResolver
 
   private
 
+  # Keep the canonical region label only while the raw region is unchanged;
+  # when the region moves, invalidate it so the next canonicalize pass refills
+  # it (and the region facet doesn't show a stale label for the new place).
+  def canonical_for(new_region)
+    new_region == @artist.region ? @artist.region_canonical : nil
+  end
+
   # Inherit the shop's verified coordinates + address (no geocoding needed).
   def apply_shop_location(signal)
     shop = signal.shop
+    region = signal.region.presence || shop.region
     @artist.update_columns(
       city:      signal.city.presence    || shop.city,
-      region:    signal.region.presence  || shop.region,
+      region:    region,
+      region_canonical: canonical_for(region),
       country:   signal.country.presence || shop.country,
       latitude:  shop.latitude,
       longitude: shop.longitude,
@@ -92,8 +103,13 @@ class LocationResolver
     Result.new(status: :unlocatable)
   end
 
+  # No usable evidence remains — drop the resolved location entirely (coords AND
+  # the city/region/country it produced), not just the provenance. Otherwise a
+  # pin survives after the signal that justified it is gone.
   def clear
     @artist.update_columns(
+      city: nil, region: nil, region_canonical: nil, country: nil,
+      latitude: nil, longitude: nil,
       location_source: nil, location_confidence: nil, location_confirmed_at: nil,
       primary_shop_id: nil, updated_at: Time.current
     )

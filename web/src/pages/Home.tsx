@@ -66,8 +66,8 @@ export default function Home() {
     <div className="page">
       {!q && (
         <div className="hero">
-          <h1>BLACKWORKERS</h1>
-          <p>An encyclopedia of blackwork tattooing — find an artist near you.</p>
+          <h1 className="wordmark">Tatu Artists Around the World</h1>
+          <p>An encyclopedia of tattooing — find an artist near you.</p>
         </div>
       )}
 

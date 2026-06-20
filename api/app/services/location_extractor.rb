@@ -47,6 +47,10 @@ class LocationExtractor
       a booking email, a personal site, or a brand/supplier. If unsure it's a studio, use null.
     - Phrases like "resident at @x", "working at @x", "tattooing at @x" -> shop @x.
     - Never treat phrases like "books closed" as locations.
+    - Do NOT derive a location from the artist's name, handle, or email address.
+      A word that is part of a personal name is NOT a city — e.g. in
+      "Caspermugridge@hotmail.com", "Casper" is the person's name, not the city
+      Casper. Only use a city that is stated as an actual location.
     - Output the JSON array and nothing else.
   TXT
 

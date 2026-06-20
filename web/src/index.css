@@ -32,11 +32,20 @@ img { display: block; }
   gap: 1.5rem;
   padding: 0.9rem 1.25rem;
 }
+/* Bungee Spice is a COLRv1 color font — it paints its own spicy orange/red
+   palette, so we don't set `color` except as a fallback for the rare browser
+   without COLRv1 support. Used for the brand wordmark only (the masthead logo
+   and the hero title); body text stays on the clean system sans. */
 .wordmark {
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  font-size: 1.05rem;
+  font-family: "Bungee Spice", "Bungee", system-ui, sans-serif;
+  color: #d2552a; /* fallback only */
   text-transform: uppercase;
+  text-decoration: none;
+}
+.masthead .wordmark {
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 .masthead nav {
   display: flex;
@@ -77,6 +86,13 @@ img { display: block; }
 .page { max-width: var(--max); margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
 .hero { text-align: center; padding: 2.5rem 1rem 1.5rem; }
 .hero h1 { font-size: 2rem; letter-spacing: 0.04em; margin: 0 0 0.5rem; }
+/* Hero is the brand showpiece: the full color wordmark, large and fluid. */
+.hero .wordmark {
+  font-size: clamp(1.9rem, 6vw, 3.4rem);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.75rem;
+}
 .hero p { color: var(--muted); margin: 0; }
 
 .filters {

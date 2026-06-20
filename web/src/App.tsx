@@ -30,8 +30,8 @@ export default function App() {
     <>
       <header className="masthead">
         <div className="masthead-inner">
-          <NavLink to="/" className="wordmark">
-            Blackworkers
+          <NavLink to="/" className="wordmark" title="Tatu — Artists Around the World">
+            Tatu
           </NavLink>
           <SearchBar />
           <nav>
