@@ -82,7 +82,10 @@ namespace :following do
     ingested = 0
     artists.each_slice(20) do |batch|
       items = ApifyClient.new.posts_for(batch.map(&:handle), per_user: 6)
-      r = InstagramIngestor.new(items, attach_images: true, source_account: "personal_following").call
+      # Attribute by the account scraped (their own work), NOT by caption —
+      # an artist's own posts don't credit themselves.
+      r = InstagramIngestor.new(items, attach_images: true, attribute_by: :owner,
+                                source_account: "personal_following").call
       ingested += r.posts_created
       print "\r  posts ingested: #{ingested}"
     end
