@@ -12,10 +12,11 @@ services:
     plan: starter
     region: oregon
     healthCheckPath: /up
-    # Run Puma directly on Render's $PORT (bypasses thruster, which expects :80).
-    # The Docker entrypoint runs `rails db:prepare` on boot, so migrations apply
-    # automatically on deploy.
-    dockerCommand: ./bin/rails server -b 0.0.0.0
+    # Run Puma directly on Render's $PORT (puma.rb binds 0.0.0.0:$PORT).
+    dockerCommand: ./bin/rails server
+    # Apply migrations once per deploy (Render's recommended mechanism — runs in
+    # a one-off release step before the new version goes live).
+    preDeployCommand: ./bin/rails db:prepare
     envVars:
       - key: RAILS_ENV
         value: production
