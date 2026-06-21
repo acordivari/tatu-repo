@@ -61,6 +61,19 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
+  # Active Storage image URLs are serialized into JSON and loaded by the SPA,
+  # which lives on a different origin (Netlify). So url helpers must produce
+  # ABSOLUTE URLs pointing at this API — which means they need a host. Render
+  # provides RENDER_EXTERNAL_HOSTNAME automatically; APP_HOST overrides it for a
+  # custom domain.
+  config.after_initialize do
+    host = ENV["APP_HOST"].presence || ENV["RENDER_EXTERNAL_HOSTNAME"].presence
+    if host
+      Rails.application.routes.default_url_options[:host] = host
+      Rails.application.routes.default_url_options[:protocol] = "https"
+    end
+  end
+
   # Enable DNS rebinding protection and other `Host` header attacks.
   # config.hosts = [
   #   "example.com",     # Allow requests from example.com
