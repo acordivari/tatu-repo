@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# Add artists to PRODUCTION and run the full enrichment pipeline on just them —
+# entirely from your machine. The pipeline API keys (Apify / Anthropic / Google)
+# never leave your laptop; only the resulting data + images land in prod + R2.
+#
+# One-time setup: add PROD_DATABASE_URL to api/.env — the Render "External
+# Database URL" (Render → tatu-db → Connect), with ?sslmode=require on the end.
+#
+# Usage:  bin/add-artists handle1 [handle2 handle3 ...]
+#
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+[ "$#" -ge 1 ] || { echo "Usage: bin/add-artists handle1 [handle2 ...]"; exit 1; }
+
+# Load local secrets (Apify/Anthropic/Google/R2 + PROD_DATABASE_URL).
+set -a; source .env; set +a
+: "${PROD_DATABASE_URL:?Add PROD_DATABASE_URL to api/.env (Render External DB URL, incl. ?sslmode=require)}"
+[ -f config/master.key ] || { echo "config/master.key missing"; exit 1; }
+
+handles="$(IFS=,; echo "$*")"
+echo "→ adding to PRODUCTION: $handles"
+
+# RAILS_ENV=production so Active Storage = R2 (images upload straight to R2 with
+# service_name=cloudflare — no migration/flip needed for new artists).
+RBENV_VERSION="${RBENV_VERSION:-3.3.0}" \
+RAILS_ENV=production \
+RAILS_MASTER_KEY="$(cat config/master.key)" \
+DATABASE_URL="$PROD_DATABASE_URL" \
+exec bin/rails "artists:add[$handles]"
