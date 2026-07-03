@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { ShopArtist } from "../types";
 import BookingNote from "../components/BookingNote";
+import ShopCard from "../components/ShopCard";
 
 function statusLabel(status: string | null): { text: string; tone: string } | null {
   switch (status) {
@@ -86,6 +87,17 @@ export default function ShopPage() {
             <RosterCard key={a.id} a={a} />
           ))}
         </div>
+      )}
+
+      {data.nearby?.length > 0 && (
+        <>
+          <h2 className="section-title">More studios in {data.city}</h2>
+          <div className="shop-grid">
+            {data.nearby.map((s) => (
+              <ShopCard key={s.id} s={s} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

@@ -22,14 +22,16 @@ class ShopSerializer
     }
   end
 
-  # Full shop page: location + the roster of artists who work there.
-  def as_detail
+  # Full shop page: location + the roster of artists who work there, plus
+  # other studios in the same city (passed in by the controller).
+  def as_detail(nearby: [])
     as_card.merge(
       address:    @shop.address_raw,
       latitude:   @shop.latitude,
       longitude:  @shop.longitude,
       maps_url:   maps_url,
-      artists:    roster
+      artists:    roster,
+      nearby:     nearby.map { |s| ShopSerializer.new(s).as_card }
     )
   end
 

@@ -72,6 +72,8 @@ export interface ShopDetail extends ShopCard {
   longitude: number | null;
   maps_url: string | null;
   artists: ShopArtist[];
+  // Other located studios in the same city, most-staffed first.
+  nearby: ShopCard[];
 }
 
 export interface ArtistMarker {

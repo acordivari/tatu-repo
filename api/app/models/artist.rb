@@ -21,13 +21,25 @@ class Artist < ApplicationRecord
   scope :in_country, ->(c) { where("LOWER(country) = ?", c.to_s.downcase) }
   scope :in_region,  ->(r) { where("LOWER(#{REGION_KEY.to_s}) = ?", r.to_s.strip.downcase) }
 
-  # Text search across handle, name, shop, and location.
+  # Text search. A query that exactly names a place with artists in it (city,
+  # region, or country) is treated as a location search and returns only the
+  # artists there — otherwise an artist merely *named* "Austin" would ride
+  # along with every Austin, TX result. Anything else falls back to a broad
+  # substring match across handle, name, shop, and location fields, so a
+  # person is still findable by name or handle.
   scope :search, ->(q) {
-    term = "%#{sanitize_sql_like(q.to_s.strip)}%"
+    term = q.to_s.strip
+    place = where(
+      "LOWER(city) = :q OR LOWER(#{REGION_KEY.to_s}) = :q OR LOWER(country) = :q",
+      q: term.downcase
+    )
+    return place if place.exists?
+
+    t = "%#{sanitize_sql_like(term)}%"
     where(
       "handle ILIKE :t OR name ILIKE :t OR shop_name ILIKE :t OR " \
       "city ILIKE :t OR region ILIKE :t OR region_canonical ILIKE :t OR country ILIKE :t",
-      t: term
+      t: t
     )
   }
 

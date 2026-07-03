@@ -47,6 +47,29 @@ class ShopsApiTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "show lists nearby studios in the same city and country, excluding itself" do
+    neighbor = Shop.create!(handle: "berlinink", name: "Berlin Ink", city: "berlin",
+                            country: "Germany", latitude: 52.5, longitude: 13.4)
+    # Same city name, different country — must not appear.
+    Shop.create!(handle: "berlin_usa", name: "Berlin USA Tattoo", city: "Berlin",
+                 country: "United States", latitude: 39.79, longitude: -74.93)
+    # Same city but unlocated — must not appear.
+    Shop.create!(handle: "berlin_ghost", name: "Berlin Ghost", city: "Berlin", country: "Germany")
+
+    get "/api/v1/shops/inkstudio"
+    assert_response :success
+    nearby = JSON.parse(response.body)["nearby"]
+    assert_equal [neighbor.handle], nearby.map { |s| s["handle"] }
+  end
+
+  test "show returns no nearby studios when the shop has no city" do
+    Shop.create!(handle: "nocity", name: "No City", country: "Germany",
+                 latitude: 50.0, longitude: 10.0)
+    get "/api/v1/shops/nocity"
+    assert_response :success
+    assert_equal [], JSON.parse(response.body)["nearby"]
+  end
+
   test "artist detail includes the artist's studio" do
     get "/api/v1/artists/resident_artist"
     assert_response :success

@@ -1,25 +1,8 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import type { ShopCard } from "../types";
 import BookingNote from "../components/BookingNote";
-
-function Card({ s }: { s: ShopCard }) {
-  const place = [s.city, s.region, s.country].filter(Boolean).join(", ");
-  const closed = s.business_status?.startsWith("CLOSED");
-  return (
-    <Link to={`/shops/${s.handle}`} className="shop-card">
-      <div className="shop-card-name">{s.name}</div>
-      {place ? <div className="meta">{place}</div> : null}
-      <div className="shop-card-foot">
-        <span className="count">
-          {s.members_count} {s.members_count === 1 ? "artist" : "artists"}
-        </span>
-        {closed && <span className="status-badge closed small">closed</span>}
-      </div>
-    </Link>
-  );
-}
+import ShopCard from "../components/ShopCard";
 
 export default function ShopsPage() {
   const [params, setParams] = useSearchParams();
@@ -71,7 +54,7 @@ export default function ShopsPage() {
         <>
           <div className="shop-grid">
             {shops.data!.items.map((s) => (
-              <Card key={s.id} s={s} />
+              <ShopCard key={s.id} s={s} />
             ))}
           </div>
           {shops.data!.totalPages > 1 && (

@@ -28,4 +28,39 @@ class ArtistTest < ActiveSupport::TestCase
     Artist.create!(handle: "b1", country: "Poland", region: "Mazowieckie", region_canonical: nil)
     assert_equal ["b1"], Artist.in_region("Mazowieckie").pluck(:handle)
   end
+
+  test "search for an exact place name returns only artists located there" do
+    Artist.create!(handle: "atx1", city: "Austin", region: "Texas", country: "United States")
+    # Named Austin, lives in Dover — must NOT match a city search for Austin.
+    Artist.create!(handle: "austincpratttattoo", name: "Austin C Pratt-Fusari",
+                   city: "Dover", region: "Pennsylvania", country: "United States")
+
+    assert_equal ["atx1"], Artist.search("Austin").pluck(:handle)
+    assert_equal ["atx1"], Artist.search("  austin ").pluck(:handle)
+  end
+
+  test "search place match works on canonical region and country" do
+    Artist.create!(handle: "c1", region: "CA", region_canonical: "California", country: "United States")
+    assert_equal ["c1"], Artist.search("California").pluck(:handle)
+    assert_equal ["c1"], Artist.search("United States").pluck(:handle)
+  end
+
+  test "search falls back to name/handle matching when the query is not a place" do
+    Artist.create!(handle: "austincpratttattoo", name: "Austin C Pratt-Fusari",
+                   city: "Dover", region: "Pennsylvania", country: "United States")
+
+    # No artist lives in a place called "Austin", so the broad match applies
+    # and he is findable by name, partial name, or handle.
+    assert_equal ["austincpratttattoo"], Artist.search("Austin C Pratt").pluck(:handle)
+    assert_equal ["austincpratttattoo"], Artist.search("austincpratt").pluck(:handle)
+    assert_equal ["austincpratttattoo"], Artist.search("Austin").pluck(:handle)
+  end
+
+  test "search place precedence respects chained scopes" do
+    Artist.create!(handle: "atx1", city: "Austin", region: "Texas", country: "United States")
+    Artist.create!(handle: "aus1", city: "Austin", region: nil, country: "Australia")
+
+    handles = Artist.in_country("United States").search("Austin").pluck(:handle)
+    assert_equal ["atx1"], handles
+  end
 end

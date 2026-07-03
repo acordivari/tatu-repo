@@ -16,10 +16,21 @@ module Api
       def show
         shop = Shop.includes(memberships: { artist: { posts: { image_attachment: :blob } } })
                    .find(find_shop_id)
-        render json: ShopSerializer.new(shop).as_detail
+        render json: ShopSerializer.new(shop).as_detail(nearby: nearby_shops(shop))
       end
 
       private
+
+      # Other located studios in the same city (and country — "Paris" exists on
+      # two continents), most-staffed first, for the shop page's discovery strip.
+      def nearby_shops(shop)
+        return Shop.none if shop.city.blank?
+
+        scope = Shop.located.where.not(id: shop.id)
+                    .where("LOWER(city) = ?", shop.city.downcase)
+        scope = scope.where("LOWER(country) = ?", shop.country.downcase) if shop.country.present?
+        scope.order(memberships_count: :desc, name: :asc).limit(6)
+      end
 
       def find_shop_id
         if params[:id].to_s.match?(/\A\d+\z/)
