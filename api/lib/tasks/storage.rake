@@ -42,21 +42,36 @@ namespace :storage do
   #     bin/rails storage:preprocess_variants
   #
   # Idempotent: already-processed variants are skipped by Active Storage.
+  # THREADS=n parallelizes the download→resize→upload round trips (set
+  # RAILS_MAX_THREADS at least as high so the AR pool keeps up).
   desc "Pre-generate the :card variant for every stored post image"
   task preprocess_variants: :environment do
-    scope = Post.joins(:image_attachment)
-    total = scope.count
+    threads = ENV.fetch("THREADS", 1).to_i.clamp(1, 16)
+    ids = Post.joins(:image_attachment).pluck(:id)
+    total = ids.size
+    queue = Queue.new
+    ids.each { |id| queue << id }
     done = failed = 0
+    lock = Mutex.new
 
-    scope.with_image_blobs.find_each do |post|
-      post.image.variant(:card).processed
-      done += 1
-    rescue StandardError => e
-      failed += 1
-      puts "\n  ! post #{post.id} (#{post.ig_shortcode}): #{e.class}: #{e.message}"
-    ensure
-      print "\r  #{done + failed}/#{total}  ok:#{done} failed:#{failed}"
+    workers = threads.times.map do
+      Thread.new do
+        while (id = queue.pop(true) rescue nil)
+          ActiveRecord::Base.connection_pool.with_connection do
+            post = Post.with_image_blobs.find(id)
+            begin
+              post.image.variant(:card).processed
+              lock.synchronize { done += 1 }
+            rescue StandardError => e
+              lock.synchronize { failed += 1 }
+              puts "\n  ! post #{post.id} (#{post.ig_shortcode}): #{e.class}: #{e.message}"
+            end
+          end
+          lock.synchronize { print "\r  #{done + failed}/#{total}  ok:#{done} failed:#{failed}" }
+        end
+      end
     end
+    workers.each(&:join)
 
     puts "\nDone. Failed posts fall back to serving their original image."
   end
