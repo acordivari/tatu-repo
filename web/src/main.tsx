@@ -9,6 +9,8 @@ import ArtistPage from "./pages/ArtistPage";
 import ShopPage from "./pages/ShopPage";
 import ShopsPage from "./pages/ShopsPage";
 import Review from "./pages/Review";
+import NotFound from "./pages/NotFound";
+import ErrorPage from "./pages/ErrorPage";
 
 // Code-split the map route so MapLibre (~1MB) only loads when the map is opened.
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -21,6 +23,7 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
+    errorElement: <ErrorPage />,
     children: [
       { index: true, element: <Home /> },
       { path: "artists/:handle", element: <ArtistPage /> },
@@ -35,6 +38,7 @@ const router = createBrowserRouter([
           </Suspense>
         ),
       },
+      { path: "*", element: <NotFound /> },
     ],
   },
 ]);

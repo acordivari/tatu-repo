@@ -33,6 +33,13 @@ services:
       #   e.g. https://tatu.netlify.app
       - key: FRONTEND_ORIGINS
         sync: false
+      # Secret — shared token for the /review moderation endpoints (must match
+      # what you enter on the SPA's /review page). Blank = endpoints disabled.
+      - key: ADMIN_TOKEN
+        sync: false
+      # Secret — Sentry error tracking. Optional; blank disables Sentry.
+      - key: SENTRY_DSN
+        sync: false
       # Cloudflare R2 credentials (Active Storage). Secrets.
       - key: R2_ACCESS_KEY_ID
         sync: false

@@ -1,13 +1,58 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, ApiError, getAdminToken, setAdminToken } from "../api/client";
 import type { Candidate } from "../types";
+import { usePageMeta } from "../usePageMeta";
+
+// Approving a candidate publishes it to the live directory, so the API
+// requires a shared admin token — this gate collects it (kept per-tab).
+function TokenGate({
+  message,
+  onSubmit,
+}: {
+  message?: string;
+  onSubmit: (token: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="page review">
+      <div className="review-card">
+        <h2>Moderator sign-in</h2>
+        <p className="review-bio">
+          Reviewing candidates requires the admin token (the API&apos;s{" "}
+          <code>ADMIN_TOKEN</code>).
+        </p>
+        {message && <p style={{ color: "#b00020", fontSize: "0.85rem" }}>{message}</p>}
+        <form
+          className="filters"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value.trim()) onSubmit(value.trim());
+          }}
+        >
+          <input
+            type="password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Admin token"
+            aria-label="Admin token"
+          />
+          <button type="submit">Continue</button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Review() {
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ["candidates"],
+  usePageMeta("Review queue");
+  const [token, setToken] = useState(getAdminToken());
+  const { data, isLoading, isError, error: queryError, refetch, isFetching } = useQuery({
+    queryKey: ["candidates", token],
     queryFn: api.candidates,
     staleTime: Infinity,
+    retry: false,
+    enabled: !!token,
   });
 
   const [queue, setQueue] = useState<Candidate[]>([]);
@@ -60,8 +105,18 @@ export default function Review() {
     return () => window.removeEventListener("keydown", onKey);
   }, [decide, current]);
 
+  const saveToken = (t: string) => {
+    setAdminToken(t);
+    if (t === token) refetch(); // same value re-entered — retry rather than no-op
+    else setToken(t);
+  };
+
+  if (!token) return <TokenGate onSubmit={saveToken} />;
+  if (isError && queryError instanceof ApiError && queryError.status === 401) {
+    return <TokenGate message="That token was rejected — check it and try again." onSubmit={saveToken} />;
+  }
   if (isLoading) return <div className="page notice">Loading review queue…</div>;
-  if (isError) return <div className="page notice">Could not load candidates. Is the API running?</div>;
+  if (isError) return <div className="page notice">Could not load the review queue — please try again.</div>;
 
   const total = queue.length;
   const done = acted.approved + acted.rejected + acted.skipped;

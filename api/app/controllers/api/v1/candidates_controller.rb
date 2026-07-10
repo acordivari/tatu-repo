@@ -1,6 +1,8 @@
 module Api
   module V1
     class CandidatesController < BaseController
+      before_action :require_admin!
+
       # GET /api/v1/candidates — the review queue (borderline classifications).
       def index
         candidates = ArtistCandidate.review.order(Arel.sql("confidence DESC NULLS LAST"), id: :asc)
@@ -23,6 +25,19 @@ module Api
       end
 
       private
+
+      # Approving a candidate publishes it to the live directory, so every
+      # candidates endpoint requires the shared admin token
+      # (Authorization: Bearer <ADMIN_TOKEN>; the /review page prompts for it).
+      # With no ADMIN_TOKEN configured, the endpoints are disabled outright.
+      def require_admin!
+        expected = ENV["ADMIN_TOKEN"].to_s
+        provided = request.authorization.to_s.delete_prefix("Bearer ").strip
+        return if expected.present? && provided.present? &&
+                  ActiveSupport::SecurityUtils.secure_compare(provided, expected)
+
+        render json: { error: "Unauthorized" }, status: :unauthorized
+      end
 
       def candidate
         @candidate ||= ArtistCandidate.find_by!(handle: Artist.normalize_handle(params[:handle]))

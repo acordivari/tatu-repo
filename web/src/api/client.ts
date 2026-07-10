@@ -12,22 +12,48 @@ import type {
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, path: string) {
+    super(`API ${status} for ${path}`);
+    this.status = status;
+  }
+}
+
+// Admin token for the /review moderation endpoints. Held per-tab; the Review
+// page prompts for it and the API rejects candidate calls without it.
+const TOKEN_KEY = "tatu_admin_token";
+
+export function getAdminToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+export function setAdminToken(token: string | null) {
+  if (token) sessionStorage.setItem(TOKEN_KEY, token);
+  else sessionStorage.removeItem(TOKEN_KEY);
+}
+
+function adminHeaders(): HeadersInit {
+  const token = getAdminToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, init);
+  if (!res.ok) throw new ApiError(res.status, path);
   return res.json() as Promise<T>;
 }
 
 async function postJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST" });
-  if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: adminHeaders() });
+  if (!res.ok) throw new ApiError(res.status, path);
   return res.json() as Promise<T>;
 }
 
 // GET a list endpoint, reading pagination metadata from response headers.
 async function getPaged<T>(path: string): Promise<Paged<T>> {
   const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API ${res.status} for ${path}`);
+  if (!res.ok) throw new ApiError(res.status, path);
   const items = (await res.json()) as T[];
   return {
     items,
@@ -82,7 +108,9 @@ export const api = {
     getJson<ShopDetail>(`/shops/${encodeURIComponent(handleOrId)}`),
 
   candidates: () =>
-    getJson<{ count: number; candidates: Candidate[] }>(`/candidates`),
+    getJson<{ count: number; candidates: Candidate[] }>(`/candidates`, {
+      headers: adminHeaders(),
+    }),
   approveCandidate: (handle: string) =>
     postJson<{ status: string; handle: string }>(
       `/candidates/${encodeURIComponent(handle)}/approve`

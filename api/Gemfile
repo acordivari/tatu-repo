@@ -34,6 +34,13 @@ gem "aws-sdk-s3", require: false
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin Ajax possible
 gem "rack-cors"
 
+# Throttle abusive clients — this is a public, unauthenticated API
+gem "rack-attack"
+
+# Error tracking in production (no-op unless SENTRY_DSN is set)
+gem "sentry-ruby"
+gem "sentry-rails"
+
 # Geocode artist locations (city/shop -> lat/lng) for the interactive map
 gem "geocoder"
 

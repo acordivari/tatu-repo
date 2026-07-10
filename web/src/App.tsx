@@ -34,13 +34,14 @@ export default function App() {
             Tatu
           </NavLink>
           <SearchBar />
+          {/* /review (moderation) is deliberately unlisted — it's admin-only,
+              reached by URL and gated by the API's ADMIN_TOKEN. */}
           <nav>
             <NavLink to="/" end>
               Artists
             </NavLink>
             <NavLink to="/shops">Studios</NavLink>
             <NavLink to="/map">Map</NavLink>
-            <NavLink to="/review">Review</NavLink>
           </nav>
         </div>
       </header>
