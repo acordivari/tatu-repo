@@ -34,13 +34,15 @@ Seed data gives 3 demo artists with images + coordinates, so search/filters/map 
 
 ## Environment
 
-Secrets live in `api/.env` (gitignored; see `api/.env.example`). None are needed for normal dev — only for the data pipeline: `APIFY_TOKEN` (scraping), `ANTHROPIC_API_KEY` (bio location extraction / classification), `GOOGLE_MAPS_API_KEY` (Places shop verification), `R2_*` (production image storage), `PROD_DATABASE_URL` (lets `api/bin/add-artists` run the pipeline locally against prod).
+Secrets live in `api/.env` (gitignored; see `api/.env.example`). None are needed for normal dev — only for the data pipeline: `APIFY_TOKEN` (scraping), `ANTHROPIC_API_KEY` (bio location extraction / classification), `GOOGLE_MAPS_API_KEY` (Places shop verification), `R2_*` (production image storage), `PROD_DATABASE_URL` (lets `api/bin/add-artists` run the pipeline locally against prod). `ADMIN_TOKEN` gates the `/api/v1/candidates` moderation endpoints (the SPA's `/review` page prompts for the same value; blank disables them). Optional: `SENTRY_DSN` (error tracking), `R2_PUBLIC_BASE` (public-bucket image URLs instead of signed ones), `SITE_BASE_URL` (sitemap link base).
 
 ## Architecture
 
 **Data flow:** SPA → fetch wrapper (`web/src/api/client.ts`) → `/api/v1` JSON. List endpoints paginate via `X-Page` / `X-Total-Pages` / `X-Total-Count` response headers (exposed through CORS), parsed by `getPaged` into a `Paged<T>`. Route params (artist/shop handles, candidate handles) may contain dots, so Rails routes constrain them with `%r{[^/]+}` and `format: false` — keep that pattern for new handle routes.
 
 **Models** (`api/app/models/`): `Artist` (unique `handle`, bio, city/region/country + lat/lng, `sources[]` provenance) ← `Post` (unique `ig_shortcode`, Active Storage image — images are downloaded and owned, never hotlinked to Instagram CDN). Plus `Shop`/`Membership`, `LocationSignal` (confidence-scored evidence ledger for geocoding), and `ArtistCandidate` (follow-list discovery review queue).
+
+**Images:** serializers emit DIRECT storage URLs for the 640px `:card` variant via `ImageUrls` (`api/app/serializers/image_urls.rb`) — never `rails_blob_url` redirects, so image requests don't hit Rails. Variant processor is `:mini_magick` (ImageMagick — dev machines and the Docker image both have it; libvips isn't installed). After ingesting new posts, run `rake storage:preprocess_variants` so no request pays the resize cost. Read endpoints send `Cache-Control: public` (see `cache_publicly`); rack-attack throttles by IP.
 
 **Ingestion pipeline** (services in `api/app/services/`, driven by rake tasks in `api/lib/tasks/`):
 scrape via Apify (`ApifyClient`, async run + poll) → `InstagramIngestor` parses `"tattoo by @handle"` from captions (`Post.handle_from_caption`) → idempotent Artist upsert → image download + artist enrichment as background jobs (`:async` adapter — in-process, no separate worker). Location resolution is multi-stage: Claude extracts locations from bios (`LocationExtractor`) → shops verified via Google Places (`ShopPlaceVerifier`/`GooglePlacesResolver`) → signals written to the `LocationSignal` ledger → `LocationResolver` picks a winner → Nominatim geocodes (throttled).

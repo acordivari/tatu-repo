@@ -21,15 +21,46 @@ migration task. The steps below are the manual / account actions.
 > **Order:** create R2 → create Render DB + service → restore the database →
 > deploy Netlify → point CORS back at Netlify → migrate images.
 
-## Current deployment status (2026-06)
+## Current deployment status (2026-07)
 
 - **API:** https://tatu-api-tbm6.onrender.com — live (1,658 artists, 666 shops).
 - **SPA:** https://tatu-repo1.netlify.app — live, CORS connected.
-- **Images:** ⏳ pending. Cloudflare R2's S3 endpoint for the (brand-new)
-  account was not yet serving TLS at launch (handshake `alert 40` from every
-  network — a Cloudflare-side provisioning delay, not a config error). The site
-  works fully; thumbnails 404 until the two image steps below are done. See
-  **§7** to finish on R2, or **Appendix A** to switch to AWS S3.
+- **Images:** ✅ live on R2 (the TLS provisioning delay resolved itself; §7 was
+  completed).
+
+### Shipping the production-hardening release (2026-07)
+
+The image-delivery / security / SEO changes need these one-time actions, in
+this order:
+
+1. **Pre-generate image variants BEFORE deploying the code** (run locally
+   against prod, like `bin/add-artists` — old code ignores the new variants,
+   so this is safe to do first). Serializers in the new code serve 640px
+   `:card` variants with direct R2 URLs instead of full-res originals
+   redirected through Rails; if the variants don't exist yet, the first
+   request per image processes it on-demand inside the request (slow, and
+   heavy on the starter instance).
+   ```bash
+   cd api
+   set -a; source .env; set +a    # loads R2_* and PROD_DATABASE_URL
+   RAILS_ENV=production RAILS_MASTER_KEY="$(cat config/master.key)" \
+   DATABASE_URL="$PROD_DATABASE_URL" RBENV_VERSION=3.3.0 \
+   bin/rails storage:preprocess_variants
+   ```
+   Re-run it after each `bin/add-artists` batch (idempotent).
+2. **Render env:** set `ADMIN_TOKEN` (same value you'll enter on the SPA's
+   `/review` page — it now requires it) and optionally `SENTRY_DSN` (error
+   tracking; create a free project at sentry.io). Then deploy.
+3. **Optional — permanent public image URLs:** enable public access on the R2
+   bucket (Settings → Public access → r2.dev subdomain or custom domain) and
+   set `R2_PUBLIC_BASE=https://<public-host>` on Render. Without it, direct
+   signed URLs are used (7-day expiry, re-signed every 3 days) — also fine,
+   but public URLs are permanent and cache best.
+4. **robots.txt** (`web/public/robots.txt`) hardcodes the API sitemap URL —
+   update it if the API moves to a custom domain.
+5. **Watch memory after deploy:** Puma now really runs 2 workers (the old
+   config silently ignored `WEB_CONCURRENCY`), roughly doubling RAM on the
+   512 MB starter instance. If it's tight, set `WEB_CONCURRENCY=1`.
 
 ---
 

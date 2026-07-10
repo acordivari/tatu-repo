@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api } from "../api/client";
+import { usePageMeta } from "../usePageMeta";
 
 // Free demo raster style (no API key). Swap for MapTiler/Mapbox in production.
 const STYLE: maplibregl.StyleSpecification = {
@@ -19,6 +20,7 @@ const STYLE: maplibregl.StyleSpecification = {
 };
 
 export default function MapPage() {
+  usePageMeta("Map");
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const { data } = useQuery({ queryKey: ["map-artists"], queryFn: () => api.mapArtists() });

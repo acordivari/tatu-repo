@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { PostCard } from "../types";
 import BookingNote from "../components/BookingNote";
+import { usePageMeta } from "../usePageMeta";
 
 function Tile({ post }: { post: PostCard }) {
   return (
@@ -22,6 +23,11 @@ export default function ArtistPage() {
     enabled: !!handle,
   });
 
+  const place = data
+    ? [data.city, data.region, data.country].filter(Boolean).join(", ")
+    : "";
+  usePageMeta(data ? `@${data.handle}${place ? ` — tattoo artist in ${place}` : ""}` : undefined);
+
   if (isLoading) return <div className="page notice">Loading…</div>;
   if (isError || !data)
     return (
@@ -29,8 +35,6 @@ export default function ArtistPage() {
         Artist not found. <Link to="/">Back to directory</Link>
       </div>
     );
-
-  const place = [data.city, data.region, data.country].filter(Boolean).join(", ");
   const shops = data.shops ?? [];
   const primaryShop = shops[0];
 

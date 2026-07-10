@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { ArtistCard } from "../types";
 import BookingNote from "../components/BookingNote";
+import { usePageMeta } from "../usePageMeta";
 
 function Card({ a }: { a: ArtistCard }) {
   const place = [a.city, a.region, a.country].filter(Boolean).join(", ");
@@ -29,6 +30,14 @@ export default function Home() {
   const country = params.get("country") ?? "";
   const region = params.get("region") ?? "";
   const page = Number(params.get("page") ?? 1);
+
+  usePageMeta(
+    q
+      ? `Search “${q}”`
+      : country
+        ? `Tattoo artists in ${[region, country].filter(Boolean).join(", ")}`
+        : undefined
+  );
 
   // Region facet is country-scoped: refetch when the active country changes.
   const facets = useQuery({
@@ -121,7 +130,7 @@ export default function Home() {
         <div className="notice">Loading…</div>
       ) : artists.isError ? (
         <div className="notice">
-          Could not reach the API. Is the Rails server running on :3000?
+          Couldn&apos;t load artists right now — please try again in a moment.
         </div>
       ) : artists.data && artists.data.items.length === 0 ? (
         <div className="notice">No artists found{q ? ` for “${q}”` : ""}.</div>

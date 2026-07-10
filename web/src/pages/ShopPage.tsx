@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { ShopArtist } from "../types";
 import BookingNote from "../components/BookingNote";
 import ShopCard from "../components/ShopCard";
+import { usePageMeta } from "../usePageMeta";
 
 function statusLabel(status: string | null): { text: string; tone: string } | null {
   switch (status) {
@@ -41,6 +42,11 @@ export default function ShopPage() {
     enabled: !!handle,
   });
 
+  const place = data
+    ? [data.city, data.region, data.country].filter(Boolean).join(", ")
+    : "";
+  usePageMeta(data ? `${data.name}${place ? ` — ${place}` : ""}` : undefined);
+
   if (isLoading) return <div className="page notice">Loading…</div>;
   if (isError || !data)
     return (
@@ -48,8 +54,6 @@ export default function ShopPage() {
         Shop not found. <Link to="/shops">Back to studios</Link>
       </div>
     );
-
-  const place = [data.city, data.region, data.country].filter(Boolean).join(", ");
   const status = statusLabel(data.business_status);
 
   return (

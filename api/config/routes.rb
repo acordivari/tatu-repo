@@ -2,6 +2,9 @@ Rails.application.routes.draw do
   # Health check for load balancers / uptime monitors.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Sitemap of the SPA's routes (referenced by the SPA host's robots.txt).
+  get "sitemap.xml", to: "sitemap#show", format: false
+
   namespace :api do
     namespace :v1 do
       resources :artists, only: %i[index show] do

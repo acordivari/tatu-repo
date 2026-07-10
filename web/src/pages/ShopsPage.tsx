@@ -3,8 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import BookingNote from "../components/BookingNote";
 import ShopCard from "../components/ShopCard";
+import { usePageMeta } from "../usePageMeta";
 
 export default function ShopsPage() {
+  usePageMeta("Studios");
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const page = Number(params.get("page") ?? 1);
@@ -47,7 +49,7 @@ export default function ShopsPage() {
       {shops.isLoading ? (
         <div className="notice">Loading…</div>
       ) : shops.isError ? (
-        <div className="notice">Could not reach the API. Is the Rails server running on :3000?</div>
+        <div className="notice">Couldn&apos;t load studios right now — please try again in a moment.</div>
       ) : shops.data && shops.data.items.length === 0 ? (
         <div className="notice">No studios found{q ? ` for “${q}”` : ""}.</div>
       ) : (
