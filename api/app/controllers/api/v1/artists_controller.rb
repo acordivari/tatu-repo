@@ -1,6 +1,8 @@
 module Api
   module V1
     class ArtistsController < BaseController
+      before_action :cache_publicly
+
       # GET /api/v1/artists?q=&country=&region=&located=&sort=
       def index
         artists = Artist.all
@@ -10,14 +12,14 @@ module Api
         artists = artists.located                          if params[:located] == "true"
         artists = sort(artists)
 
-        records = paginate(artists).includes(posts: { image_attachment: :blob })
+        records = paginate(artists).includes(posts: Post::IMAGE_EAGER_LOAD)
         render json: records.map { |a| ArtistSerializer.new(a).as_card }
       end
 
       # GET /api/v1/artists/:id  (id may be a numeric id or a handle)
       def show
         artist = find_artist
-        posts = artist.posts.recent.limit(60)
+        posts = artist.posts.recent.limit(60).with_image_blobs
         render json: ArtistSerializer.new(artist).as_detail(posts: posts)
       end
 

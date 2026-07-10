@@ -1,9 +1,11 @@
 module Api
   module V1
     class PostsController < BaseController
+      before_action :cache_publicly
+
       # GET /api/v1/posts?artist=&attributed=
       def index
-        posts = Post.includes(:artist).recent
+        posts = Post.includes(:artist).with_image_blobs.recent
         posts = posts.attributed if params[:attributed] == "true"
         if params[:artist].present?
           handle = Artist.normalize_handle(params[:artist])

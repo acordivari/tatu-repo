@@ -1,6 +1,8 @@
 module Api
   module V1
     class ShopsController < BaseController
+      before_action :cache_publicly
+
       # GET /api/v1/shops?q=&country=  — browsable directory (located shops only,
       # most-staffed first).
       def index
@@ -14,7 +16,7 @@ module Api
 
       # GET /api/v1/shops/:id  (id may be a numeric id or a handle)
       def show
-        shop = Shop.includes(memberships: { artist: { posts: { image_attachment: :blob } } })
+        shop = Shop.includes(memberships: { artist: { posts: Post::IMAGE_EAGER_LOAD } })
                    .find(find_shop_id)
         render json: ShopSerializer.new(shop).as_detail(nearby: nearby_shops(shop))
       end

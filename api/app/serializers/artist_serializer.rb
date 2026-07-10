@@ -1,7 +1,5 @@
 # Plain-Ruby serializers (no gem) — explicit JSON shape for the SPA.
 class ArtistSerializer
-  include Rails.application.routes.url_helpers
-
   def initialize(artist)
     @artist = artist
   end
@@ -12,8 +10,10 @@ class ArtistSerializer
     @artist.region_canonical.presence || @artist.region
   end
 
-  # Compact card representation for grids and search results.
-  def as_card
+  # Compact card representation for grids and search results. Pass
+  # preview_post when the newest post is already in hand (see as_detail) to
+  # avoid re-walking the posts association.
+  def as_card(preview_post: newest_post)
     {
       id:            @artist.id,
       handle:        @artist.handle,
@@ -26,15 +26,17 @@ class ArtistSerializer
       longitude:     @artist.longitude,
       posts_count:   @artist.posts_count,
       instagram_url: @artist.instagram_url,
-      preview_image_url: preview_image_url
+      preview_image_url: preview_post && ImageUrls.post_image_url(preview_post)
     }
   end
 
   # Full representation for the artist detail page (includes recent posts and
   # the studio(s) the artist works at, so the profile can point visitors to the
-  # right shop page for booking).
+  # right shop page for booking). `posts` arrive newest-first, so the first one
+  # doubles as the preview — no second pass over the association.
   def as_detail(posts: [])
-    as_card.merge(
+    posts = posts.to_a # one load — .first below must not issue its own query
+    as_card(preview_post: posts.first).merge(
       bio:          @artist.bio,
       website:      @artist.website,
       location_raw: @artist.location_raw,
@@ -66,13 +68,10 @@ class ArtistSerializer
            end
   end
 
-  # Thumbnail for the directory: the artist's most recent post image.
-  # Relies on the controller preloading :posts to avoid N+1 queries.
-  def preview_image_url
-    post = @artist.posts.max_by { |p| p.posted_at || p.created_at }
-    return nil if post.nil?
-
-    post.image.attached? ? rails_blob_url(post.image) : post.image_url
+  # The artist's most recent post, for the directory thumbnail. Relies on the
+  # controller preloading :posts to avoid N+1 queries.
+  def newest_post
+    @artist.posts.max_by { |p| p.posted_at || p.created_at }
   end
 
   # Minimal marker for the map.

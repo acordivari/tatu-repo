@@ -29,6 +29,10 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local
 
+  # Match production so ImageUrls' cached signed URLs (3-day reuse) always
+  # outlive the cache entry in dev too.
+  config.active_storage.service_urls_expire_in = 1.week
+
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 

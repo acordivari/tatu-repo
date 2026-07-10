@@ -32,4 +32,32 @@ namespace :storage do
     puts "\nDone. copied:#{copied} skipped:#{skipped} missing:#{missing} of #{total} blobs."
     puts "Missing files are blob rows whose disk file is gone — safe to ignore." if missing.positive?
   end
+
+  # Serializers serve the :card variant of every post image (see ImageUrls);
+  # this generates them all up front so no request ever pays the resize cost.
+  # Run it like bin/add-artists — locally, against production:
+  #
+  #   DATABASE_URL=$PROD_DATABASE_URL R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… \
+  #     R2_ENDPOINT=… R2_BUCKET=… RAILS_ENV=production RBENV_VERSION=3.3.0 \
+  #     bin/rails storage:preprocess_variants
+  #
+  # Idempotent: already-processed variants are skipped by Active Storage.
+  desc "Pre-generate the :card variant for every stored post image"
+  task preprocess_variants: :environment do
+    scope = Post.joins(:image_attachment)
+    total = scope.count
+    done = failed = 0
+
+    scope.with_image_blobs.find_each do |post|
+      post.image.variant(:card).processed
+      done += 1
+    rescue StandardError => e
+      failed += 1
+      puts "\n  ! post #{post.id} (#{post.ig_shortcode}): #{e.class}: #{e.message}"
+    ensure
+      print "\r  #{done + failed}/#{total}  ok:#{done} failed:#{failed}"
+    end
+
+    puts "\nDone. Failed posts fall back to serving their original image."
+  end
 end

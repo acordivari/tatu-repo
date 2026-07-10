@@ -23,6 +23,12 @@ Rails.application.configure do
   # object storage, not on local disk.
   config.active_storage.service = :cloudflare
 
+  # Serializers embed DIRECT signed R2 URLs in JSON (no per-image Rails
+  # redirect — see ImageUrls). A week is S3 presigning's maximum and keeps
+  # URLs valid far longer than any cached JSON that contains them.
+  # (Set R2_PUBLIC_BASE to a public bucket host to skip signing entirely.)
+  config.active_storage.service_urls_expire_in = 1.week
+
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true
 

@@ -1,7 +1,5 @@
 # JSON shape for the SPA's shop directory and shop pages.
 class ShopSerializer
-  include Rails.application.routes.url_helpers
-
   def initialize(shop)
     @shop = shop
   end

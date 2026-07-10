@@ -1,6 +1,4 @@
 class PostSerializer
-  include Rails.application.routes.url_helpers
-
   def initialize(post)
     @post = post
   end
@@ -20,13 +18,8 @@ class PostSerializer
 
   private
 
-  # Prefer the stored Active Storage copy; fall back to the (expiring)
-  # original CDN URL if the download hasn't completed yet.
+  # Card-sized rendition served straight from storage (see ImageUrls).
   def image_url
-    if @post.image.attached?
-      rails_blob_url(@post.image)
-    else
-      @post.image_url
-    end
+    ImageUrls.post_image_url(@post)
   end
 end

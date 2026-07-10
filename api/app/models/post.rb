@@ -4,7 +4,16 @@ class Post < ApplicationRecord
 
   # Stored copy of the image so the site never depends on Instagram's
   # expiring CDN URLs. image_url is kept only as the original source.
-  has_one_attached :image
+  # :card is the grid-tile rendition the SPA actually displays (~640px covers
+  # 2x-retina tiles); originals stay in storage but are never served to lists.
+  has_one_attached :image do |attachable|
+    attachable.variant :card, resize_to_limit: [ 640, 640 ], preprocessed: true
+  end
+
+  # Eager-load spec that lets serializers build variant image URLs without
+  # per-record queries. Nest it under artist preloads as Post::IMAGE_EAGER_LOAD.
+  IMAGE_EAGER_LOAD = { image_attachment: { blob: { variant_records: { image_attachment: :blob } } } }.freeze
+  scope :with_image_blobs, -> { includes(IMAGE_EAGER_LOAD) }
 
   validates :ig_shortcode, presence: true, uniqueness: true
 
