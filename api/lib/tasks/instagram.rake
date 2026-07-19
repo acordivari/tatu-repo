@@ -40,6 +40,53 @@ namespace :instagram do
     download_images
   end
 
+  desc "Top up artists' own-work images toward a target count, fewest-first. Usage: rake instagram:backfill_work[target,limit]"
+  task :backfill_work, %i[target limit] => :environment do |_t, args|
+    target = (args[:target].presence || 16).to_i
+    rows = artists_under(target)
+    rows = rows.first(args[:limit].to_i) if args[:limit].present?
+    abort "Every artist already has >= #{target} stored images." if rows.empty?
+
+    est = format("%.2f", rows.size * target / 1000.0 * 1.50)
+    puts "Backfilling #{rows.size} artists toward #{target} images each " \
+         "(<= #{rows.size * target} results, est. ~$#{est})…"
+
+    client = ApifyClient.new
+    new_posts = stored = 0
+    rows.each_slice(50).with_index(1) do |batch, i|
+      items = client.posts_for(batch.map { |r| r[:handle] }, per_user: target)
+      # Stamp the attempt immediately — even zero-yield accounts (dead/private/
+      # renamed) must leave scope, or they'd clog the head of every re-run.
+      Artist.where(id: batch.map { |b| b[:id] })
+            .update_all(work_fetched_at: Time.current, updated_at: Time.current)
+      # Owner attribution — an artist's own posts never credit themselves — and
+      # no auto-created artists from collaborative/tagged posts in the gallery.
+      r = InstagramIngestor.new(items, attach_images: false, attribute_by: :owner,
+                                create_missing: false).call
+      new_posts += r.posts_created
+      # Attach inline (throttled) so images land in the configured store (R2 in
+      # prod) before the task exits, rather than via the in-process async queue.
+      got = 0
+      Post.needs_image.where(artist_id: batch.map { |b| b[:id] }).find_each do |post|
+        AttachPostImageJob.perform_now(post.id)
+        got += 1 if post.reload.image.attached?
+        sleep 0.3
+      end
+      stored += got
+      puts "  batch #{i}/#{(rows.size / 50.0).ceil}: #{items.size} results, " \
+           "+#{r.posts_created} posts, +#{got} images (totals: #{new_posts} posts, #{stored} images)"
+    end
+
+    puts "\nDone. #{new_posts} new posts, #{stored} images stored. " \
+         "#{artists_under(target).size} artists still under #{target} " \
+         "(limited run, or private/quiet accounts)."
+    puts "Next: THREADS=8 rake storage:preprocess_variants   (pre-generate :card variants)"
+  rescue ApifyClient::NotConfigured
+    abort "APIFY_TOKEN is not set. Add it to api/.env."
+  rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
+    abort "Apify run failed: #{e.message} (progress so far is saved; re-run to continue)"
+  end
+
   desc "Enrich artists (profiles -> bio/location) via Apify, batched. Usage: rake instagram:enrich[limit,batch]"
   task :enrich, %i[limit batch] => :environment do |_t, args|
     batch_size = (args[:batch].presence || 200).to_i
@@ -230,6 +277,22 @@ namespace :instagram do
     puts "Importing #{items.size} legacy posts…"
     # Skip image downloads: the legacy CDN URLs have long since expired.
     report InstagramIngestor.new(items, attach_images: false).call
+  end
+
+  # Artists below the image target, fewest stored images first. Excludes
+  # artists already attempted in the last day (work_fetched_at, or any post
+  # touched — the pre-stamp signal): still being under target after an
+  # attempt means the account simply has fewer posts, and re-scraping it
+  # would re-bill the same results.
+  def artists_under(target)
+    counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+    attempted = Post.where(updated_at: 24.hours.ago..).where.not(artist_id: nil)
+                    .distinct.pluck(:artist_id).to_set
+    attempted.merge(Artist.where(work_fetched_at: 24.hours.ago..).pluck(:id))
+    Artist.pluck(:id, :handle)
+          .map { |id, handle| { id: id, handle: handle, imgs: counts[id] || 0 } }
+          .select { |r| r[:imgs] < target && !attempted.include?(r[:id]) }
+          .sort_by { |r| r[:imgs] }
   end
 
   def report(result)

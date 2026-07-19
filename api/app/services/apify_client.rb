@@ -161,22 +161,44 @@ class ApifyClient
 
   # --- HTTP helpers ---
 
+  # Local DNS/socket blips during a multi-hour run must not kill the task (or,
+  # worse, trigger a caller-level retry that starts — and bills — a duplicate
+  # actor run). Retrying here just repeats one HTTP request.
+  TRANSIENT_ERRORS = [ SocketError, Net::OpenTimeout, Net::ReadTimeout,
+                       Timeout::Error, Errno::ECONNRESET ].freeze
+
   def post(path, body)
-    HTTParty.post(
-      "#{BASE}#{path}?token=#{@token}",
-      headers: { "Content-Type" => "application/json" },
-      body: body.to_json,
-      timeout: 60
-    )
+    with_retries do
+      HTTParty.post(
+        "#{BASE}#{path}?token=#{@token}",
+        headers: { "Content-Type" => "application/json" },
+        body: body.to_json,
+        timeout: 60
+      )
+    end
   end
 
   def get(path, **query)
-    res = HTTParty.get("#{BASE}#{path}", query: query.merge(token: @token), timeout: 60)
+    res = with_retries { HTTParty.get("#{BASE}#{path}", query: query.merge(token: @token), timeout: 60) }
     raise RequestError, "GET #{path} failed (#{res.code})" unless res.success?
 
     JSON.parse(res.body)
   rescue JSON::ParserError => e
     raise RequestError, "invalid JSON from #{path}: #{e.message}"
+  end
+
+  def with_retries(tries: 4)
+    attempt = 0
+    begin
+      yield
+    rescue *TRANSIENT_ERRORS => e
+      attempt += 1
+      raise if attempt >= tries
+
+      Rails.logger.warn("[ApifyClient] #{e.class}: #{e.message} — retry #{attempt}/#{tries - 1} in #{15 * attempt}s")
+      sleep 15 * attempt
+      retry
+    end
   end
 
   def monotonic
