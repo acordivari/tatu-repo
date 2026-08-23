@@ -1,4 +1,9 @@
 namespace :instagram do
+  # Calibrated against real invoices (2026-07): apify~instagram-scraper bills per
+  # dataset result, and empty/private profiles still emit a billed error item.
+  # The actor page's ~$1.50/1k headline understates what we actually pay.
+  APIFY_USD_PER_1K = 2.30
+
   desc "Verify the Apify token works (no scraping cost). Usage: rake instagram:verify"
   task verify: :environment do
     token = ApifyClient.token
@@ -18,7 +23,7 @@ namespace :instagram do
   task :scrape, [:limit, :images] => :environment do |_t, args|
     limit = (args[:limit] || 1000).to_i
     with_images = args[:images].to_s.downcase != "false"
-    est = format("%.2f", limit / 1000.0 * 1.50)
+    est = format("%.2f", limit / 1000.0 * APIFY_USD_PER_1K)
     puts "Scraping up to #{limit} posts from @blackworkers via Apify (est. ~$#{est})…"
     items = ApifyClient.new.posts(username: "blackworkers", limit: limit)
     puts "Fetched #{items.size} posts. Ingesting (parsing captions for artists)…"
@@ -40,16 +45,29 @@ namespace :instagram do
     download_images
   end
 
-  desc "Top up artists' own-work images toward a target count, fewest-first. Usage: rake instagram:backfill_work[target,limit]"
-  task :backfill_work, %i[target limit] => :environment do |_t, args|
+  desc "Top up artists' own-work images toward a target count, fewest-first. " \
+       "Previously attempted artists are skipped unless retry_after (days) is given. " \
+       "Usage: rake instagram:backfill_work[target,limit,retry_after_days]"
+  task :backfill_work, %i[target limit retry_after] => :environment do |_t, args|
     target = (args[:target].presence || 16).to_i
-    rows = artists_under(target)
+    retry_after = args[:retry_after].presence&.to_i&.days
+    rows = artists_under(target, retry_after: retry_after)
+    held = artists_held_back(target, retry_after: retry_after)
     rows = rows.first(args[:limit].to_i) if args[:limit].present?
-    abort "Every artist already has >= #{target} stored images." if rows.empty?
+    if rows.empty?
+      abort "No artists eligible under #{target} images " \
+            "(#{held} previously attempted and held back by the guard; " \
+            "pass retry_after_days to include them)."
+    end
 
-    est = format("%.2f", rows.size * target / 1000.0 * 1.50)
+    est = format("%.2f", rows.size * target / 1000.0 * APIFY_USD_PER_1K)
     puts "Backfilling #{rows.size} artists toward #{target} images each " \
          "(<= #{rows.size * target} results, est. ~$#{est})…"
+    if held.positive?
+      puts "Skipping #{held} previously attempted artist(s) still under target " \
+           "#{retry_after ? "(attempted within #{args[:retry_after]}d)" : '(any prior attempt)'} " \
+           "— re-scraping re-bills their posts for little new work."
+    end
 
     client = ApifyClient.new
     new_posts = stored = 0
@@ -78,8 +96,8 @@ namespace :instagram do
     end
 
     puts "\nDone. #{new_posts} new posts, #{stored} images stored. " \
-         "#{artists_under(target).size} artists still under #{target} " \
-         "(limited run, or private/quiet accounts)."
+         "#{artists_under(target, retry_after: retry_after).size} artists still eligible under " \
+         "#{target} (limited run, or private/quiet accounts)."
     puts "Next: THREADS=8 rake storage:preprocess_variants   (pre-generate :card variants)"
   rescue ApifyClient::NotConfigured
     abort "APIFY_TOKEN is not set. Add it to api/.env."
@@ -279,20 +297,40 @@ namespace :instagram do
     report InstagramIngestor.new(items, attach_images: false).call
   end
 
-  # Artists below the image target, fewest stored images first. Excludes
-  # artists already attempted in the last day (work_fetched_at, or any post
-  # touched — the pre-stamp signal): still being under target after an
-  # attempt means the account simply has fewer posts, and re-scraping it
-  # would re-bill the same results.
-  def artists_under(target)
+  # Artists below the image target, fewest stored images first.
+  #
+  # Once attempted, an artist stays out of scope unless retry_after is passed.
+  # posts_for re-bills up to `target` results per handle regardless of how many
+  # we already hold, so an account still under target after an attempt (dead,
+  # private, or simply short on posts) costs a full re-bill to gain at most a
+  # couple of new posts. Fewest-first ordering makes this worse than it sounds:
+  # the stalled accounts sort to the head of the queue and eat the budget
+  # before any fresh artist is reached.
+  #
+  # retry_after (an ActiveSupport::Duration) lets long-idle artists back in
+  # once they have plausibly posted new work.
+  def artists_under(target, retry_after: nil)
     counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+    # A post touched in the last day marks an in-flight or just-crashed run, so
+    # a resumed invocation does not immediately re-scrape the batch it lost.
     attempted = Post.where(updated_at: 24.hours.ago..).where.not(artist_id: nil)
                     .distinct.pluck(:artist_id).to_set
-    attempted.merge(Artist.where(work_fetched_at: 24.hours.ago..).pluck(:id))
+    stamped = Artist.where.not(work_fetched_at: nil)
+    stamped = stamped.where(work_fetched_at: retry_after.ago..) if retry_after
+    attempted.merge(stamped.pluck(:id))
     Artist.pluck(:id, :handle)
           .map { |id, handle| { id: id, handle: handle, imgs: counts[id] || 0 } }
           .select { |r| r[:imgs] < target && !attempted.include?(r[:id]) }
           .sort_by { |r| r[:imgs] }
+  end
+
+  # Count of under-target artists the attempt guard is currently excluding, so
+  # a run can report what it deliberately skipped rather than silently eliding it.
+  def artists_held_back(target, retry_after: nil)
+    counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+    scope = Artist.where.not(work_fetched_at: nil)
+    scope = scope.where(work_fetched_at: retry_after.ago..) if retry_after
+    scope.pluck(:id).count { |id| (counts[id] || 0) < target }
   end
 
   def report(result)
