@@ -311,13 +311,15 @@ namespace :instagram do
   # once they have plausibly posted new work.
   def artists_under(target, retry_after: nil)
     counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
-    # A post touched in the last day marks an in-flight or just-crashed run, so
-    # a resumed invocation does not immediately re-scrape the batch it lost.
-    attempted = Post.where(updated_at: 24.hours.ago..).where.not(artist_id: nil)
-                    .distinct.pluck(:artist_id).to_set
+    # work_fetched_at alone decides. It is stamped for the whole batch straight
+    # after the Apify call and before ingestion, so a run that dies mid-flight
+    # has already recorded the attempt. The old fallback — treating any post
+    # touched in the last day as an attempt — could not tell an owner backfill
+    # from a page scrape that merely happened to include the artist's post, so
+    # `instagram:scrape` locked ~536 never-backfilled artists out of the queue.
     stamped = Artist.where.not(work_fetched_at: nil)
     stamped = stamped.where(work_fetched_at: retry_after.ago..) if retry_after
-    attempted.merge(stamped.pluck(:id))
+    attempted = stamped.pluck(:id).to_set
     Artist.pluck(:id, :handle)
           .map { |id, handle| { id: id, handle: handle, imgs: counts[id] || 0 } }
           .select { |r| r[:imgs] < target && !attempted.include?(r[:id]) }
