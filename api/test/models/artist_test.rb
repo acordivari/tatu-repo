@@ -63,4 +63,41 @@ class ArtistTest < ActiveSupport::TestCase
     handles = Artist.in_country("United States").search("Austin").pluck(:handle)
     assert_equal ["atx1"], handles
   end
+
+  test "needs_location_extraction skips artists without a bio" do
+    Artist.create!(handle: "nobio", bio: nil)
+    Artist.create!(handle: "blankbio", bio: "")
+
+    assert_empty Artist.needs_location_extraction.pluck(:handle)
+  end
+
+  test "needs_location_extraction includes a bio that was never extracted" do
+    Artist.create!(handle: "fresh", bio: "Berlin", location_extracted_at: nil)
+
+    assert_equal ["fresh"], Artist.needs_location_extraction.pluck(:handle)
+  end
+
+  test "needs_location_extraction re-includes a bio refreshed after its last extraction" do
+    # Re-enriching replaces the bio but leaves the older extraction stamp, so
+    # the new bio would otherwise never be looked at again.
+    Artist.create!(handle: "stale", bio: "Now in Lisbon",
+                   location_extracted_at: 2.days.ago, enriched_at: 1.hour.ago)
+
+    assert_equal ["stale"], Artist.needs_location_extraction.pluck(:handle)
+  end
+
+  test "needs_location_extraction excludes a bio already extracted after enrichment" do
+    Artist.create!(handle: "done", bio: "Lisbon",
+                   location_extracted_at: 1.hour.ago, enriched_at: 2.days.ago)
+
+    assert_empty Artist.needs_location_extraction.pluck(:handle)
+  end
+
+  test "needs_location_extraction excludes an extracted artist that was never enriched" do
+    # enriched_at NULL makes the comparison NULL, so the stamp alone decides.
+    Artist.create!(handle: "candidate", bio: "Oslo",
+                   location_extracted_at: 1.hour.ago, enriched_at: nil)
+
+    assert_empty Artist.needs_location_extraction.pluck(:handle)
+  end
 end

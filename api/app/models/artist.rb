@@ -16,8 +16,14 @@ class Artist < ApplicationRecord
 
   scope :located,    -> { where.not(latitude: nil, longitude: nil) }
   scope :unenriched, -> { where(enriched_at: nil) }
-  # Has a bio but hasn't had its location extracted by the LLM yet.
-  scope :needs_location_extraction, -> { where.not(bio: [nil, ""]).where(location_extracted_at: nil) }
+  # Has a bio whose location hasn't been extracted yet — either never, or not
+  # since the bio itself was last refreshed. Re-enriching an artist replaces the
+  # bio but leaves the older extraction stamp behind, so comparing the two
+  # stamps is what stops a fresh bio from being silently skipped.
+  scope :needs_location_extraction, lambda {
+    where.not(bio: [ nil, "" ])
+      .where("location_extracted_at IS NULL OR location_extracted_at < enriched_at")
+  }
   scope :in_country, ->(c) { where("LOWER(country) = ?", c.to_s.downcase) }
   scope :in_region,  ->(r) { where("LOWER(#{REGION_KEY.to_s}) = ?", r.to_s.strip.downcase) }
 
