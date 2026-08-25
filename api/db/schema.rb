@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_07_19_090000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_24_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -142,8 +142,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_07_19_090000) do
     t.bigint "artist_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "media_type"
+    t.string "product_type"
+    t.text "ocr_text"
+    t.float "ocr_text_area"
+    t.datetime "ocr_at"
+    t.integer "ocr_lines"
+    t.float "ocr_mean_height"
+    t.float "ocr_elongation"
     t.index ["artist_id"], name: "index_posts_on_artist_id"
     t.index ["ig_shortcode"], name: "index_posts_on_ig_shortcode", unique: true
+    t.index ["media_type"], name: "index_posts_on_media_type"
+    t.index ["ocr_at"], name: "index_posts_on_ocr_at"
     t.index ["posted_at"], name: "index_posts_on_posted_at"
   end
 

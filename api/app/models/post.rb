@@ -22,6 +22,30 @@ class Post < ApplicationRecord
   # Posts that have a source image URL but no stored copy yet.
   scope :needs_image, -> { where.not(image_url: nil).where.missing(:image_attachment) }
 
+  # An overlay is recognised by the SHAPE of its text, not the amount. Rendered
+  # captions and UI chrome are wide, short lines; lettering tattooed on skin is
+  # a few tall, chunky ones. Judging on area alone flags script tattoos as junk
+  # — on a production sample "THERE BETTER BE DOGS" and "Lola" scored higher
+  # area than an Instagram year-in-review screenshot.
+  OVERLAY_ELONGATION = 6.0   # mean line width/height; overlays 10-12, tattoos 1-2
+  OVERLAY_MAX_HEIGHT = 0.06  # mean line height; overlays 0.02-0.04, tattoos 0.10+
+  OVERLAY_MIN_CHARS  = 12    # ignore one-word detections and OCR noise on linework
+
+  # Stored image, not yet OCR'd. The image blob is immutable once attached, so
+  # a null stamp is the whole condition — there is no "re-OCR when the source
+  # changed" case to miss.
+  scope :needs_ocr, -> { where(ocr_at: nil).where.associated(:image_attachment) }
+  scope :ocr_done,  -> { where.not(ocr_at: nil) }
+  # Burned-in caption/UI text: the OCR-visible half of "not this artist's work".
+  # Deliberately says nothing about text-free personal photos (a selfie, a
+  # holiday snap) — OCR is blind to those and only the vision pass sees them.
+  scope :text_overlay, lambda {
+    ocr_done
+      .where(ocr_elongation: OVERLAY_ELONGATION..)
+      .where(ocr_mean_height: ...OVERLAY_MAX_HEIGHT)
+      .where("length(ocr_text) >= ?", OVERLAY_MIN_CHARS)
+  }
+
   # The canonical "tattoo by @handle" attribution pattern used by the
   # @blackworkers feed. Tolerates "tattoo/tattoos/tat by", an optional
   # leading @, and surrounding punctuation/emoji.

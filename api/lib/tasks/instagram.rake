@@ -105,6 +105,106 @@ namespace :instagram do
     abort "Apify run failed: #{e.message} (progress so far is saved; re-run to continue)"
   end
 
+  desc "OCR stored post images to spot burned-in overlays (local, free). Usage: rake instagram:ocr_images[limit]"
+  task :ocr_images, [:limit] => :environment do |_t, args|
+    bin = ocr_binary!
+    scope = Post.needs_ocr
+    scope = scope.limit(args[:limit].to_i) if args[:limit].present?
+    ids = scope.pluck(:id)
+    abort "No stored images need OCR." if ids.empty?
+
+    threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)
+    puts "OCR over #{ids.size} images via Apple Vision (#{threads} threads, no API cost)…"
+
+    queue = Queue.new
+    ids.each_slice(20) { |batch| queue << batch }
+    done = failed = texty = 0
+    lock = Mutex.new
+
+    workers = threads.times.map do
+      Thread.new do
+        while (batch = queue.pop(true) rescue nil)
+          Dir.mktmpdir("ocr") do |dir|
+            paths = {}
+            ActiveRecord::Base.connection_pool.with_connection do
+              Post.with_image_blobs.where(id: batch).each do |post|
+                file = File.join(dir, "#{post.id}.jpg")
+                File.binwrite(file, card_bytes(post))
+                paths[file] = post.id
+              rescue StandardError
+                lock.synchronize { failed += 1 }
+              end
+            end
+            next if paths.empty?
+
+            out = IO.popen([ bin, *paths.keys ], &:read)
+            ActiveRecord::Base.connection_pool.with_connection do
+              out.each_line do |line|
+                row = JSON.parse(line) rescue next
+                id = paths[row["path"]]
+                next if id.nil?
+
+                if row["error"]
+                  lock.synchronize { failed += 1 }
+                  next
+                end
+                Post.where(id: id).update_all(
+                  ocr_text: row["text"].presence, ocr_text_area: row["area"],
+                  ocr_lines: row["lines"], ocr_mean_height: row["mean_height"],
+                  ocr_elongation: row["mean_elongation"],
+                  ocr_at: Time.current, updated_at: Time.current
+                )
+                overlay = row["mean_elongation"].to_f >= Post::OVERLAY_ELONGATION &&
+                          row["mean_height"].to_f < Post::OVERLAY_MAX_HEIGHT &&
+                          row["text"].to_s.length >= Post::OVERLAY_MIN_CHARS
+                lock.synchronize do
+                  done += 1
+                  texty += 1 if overlay
+                end
+              end
+            end
+          end
+          lock.synchronize { print "\r  #{done + failed}/#{ids.size}  overlays:#{texty} failed:#{failed}" }
+        end
+      end
+    end
+    workers.each(&:join)
+
+    puts "\nDone. #{done} scanned, #{failed} unreadable, #{texty} look like caption/UI overlays."
+    puts "Review before filtering anything: rake instagram:ocr_report"
+  end
+
+  desc "Summarise what OCR found, so the overlay rule can be judged before it is used."
+  task ocr_report: :environment do
+    scanned = Post.ocr_done.count
+    abort "Nothing has been OCR'd yet — run rake instagram:ocr_images first." if scanned.zero?
+
+    flagged = Post.text_overlay.count
+    puts "Scanned #{scanned} images. #{flagged} match the overlay rule " \
+         "(elongation >= #{Post::OVERLAY_ELONGATION}, mean height < #{Post::OVERLAY_MAX_HEIGHT}, " \
+         "#{Post::OVERLAY_MIN_CHARS}+ chars).\n"
+
+    puts "  shape of detected text        posts"
+    [ [ "no text",                     Post.ocr_done.where(ocr_lines: [ nil, 0 ]) ],
+      [ "tall lines (lettering?)",     Post.ocr_done.where(ocr_mean_height: 0.06..) ],
+      [ "wide thin lines (overlay?)",  Post.ocr_done.where(ocr_elongation: 6.0..).where(ocr_mean_height: ...0.06) ],
+      [ "other text",                  Post.ocr_done.where(ocr_lines: 1..).where(ocr_mean_height: ...0.06).where(ocr_elongation: ...6.0) ]
+    ].each { |label, rel| puts format("  %-28s %6d", label, rel.count) }
+
+    puts "\nFLAGGED as overlay — these would be hidden. Check for false positives:"
+    Post.text_overlay.order(ocr_text_area: :desc).limit(10).each do |p|
+      puts format("  e=%5.1f h=%.3f  %-12s %s", p.ocr_elongation, p.ocr_mean_height,
+                  p.ig_shortcode.to_s[0, 12], p.ocr_text.to_s.gsub(/\s+/, " ")[0, 46])
+    end
+
+    puts "\nNOT flagged but text-heavy — confirm these really are lettering work:"
+    Post.ocr_done.where(ocr_mean_height: 0.06..).where.not(ocr_text: nil)
+        .order(ocr_text_area: :desc).limit(8).each do |p|
+      puts format("  e=%5.1f h=%.3f  %-12s %s", p.ocr_elongation, p.ocr_mean_height,
+                  p.ig_shortcode.to_s[0, 12], p.ocr_text.to_s.gsub(/\s+/, " ")[0, 46])
+    end
+  end
+
   desc "Enrich artists (profiles -> bio/location) via Apify, batched. Usage: rake instagram:enrich[limit,batch]"
   task :enrich, %i[limit batch] => :environment do |_t, args|
     batch_size = (args[:batch].presence || 200).to_i
@@ -295,6 +395,30 @@ namespace :instagram do
     puts "Importing #{items.size} legacy posts…"
     # Skip image downloads: the legacy CDN URLs have long since expired.
     report InstagramIngestor.new(items, attach_images: false).call
+  end
+
+  # The :card variant is what the site serves and what we OCR — 640px is ample
+  # for text detection and a fraction of the original's bytes.
+  def card_bytes(post)
+    v = post.image.variant(:card).processed
+    v.respond_to?(:download) ? v.download : v.image.blob.download
+  end
+
+  # Build the Vision OCR helper on first use. macOS-only by design: this is a
+  # local pipeline step, like bin/add-artists, and never runs on the API host.
+  def ocr_binary!
+    require "tmpdir"
+    require "json"
+    bin = Rails.root.join("tmp/ocr")
+    src = Rails.root.join("tools/ocr/ocr.swift")
+    return bin.to_s if bin.exist? && bin.mtime > src.mtime
+
+    abort "OCR uses Apple's Vision framework and only runs on macOS." unless RUBY_PLATFORM.include?("darwin")
+    abort "swiftc not found — install the Xcode command line tools (xcode-select --install)." if `which swiftc`.strip.empty?
+
+    puts "Building OCR helper from #{src.relative_path_from(Rails.root)}…"
+    system("swiftc", "-O", src.to_s, "-o", bin.to_s) || abort("Failed to build the OCR helper.")
+    bin.to_s
   end
 
   # Artists below the image target, fewest stored images first.

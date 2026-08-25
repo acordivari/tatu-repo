@@ -47,4 +47,24 @@ class InstagramIngestorTest < ActiveSupport::TestCase
     assert_equal 1, second.posts_updated
     assert_equal 1, Post.where(ig_shortcode: "DD1").count
   end
+  # Reel/video provenance is stored verbatim as a classifier feature. Plenty of
+  # Reels are genuine work, so this must never become a filter by itself.
+  test "captures Apify media and product type" do
+    raw = item(shortcode: "MT1", caption: "Tattoo by @mtartist")
+          .merge(type: "Video", productType: "clips")
+    InstagramIngestor.new([ raw ], attach_images: false).call
+
+    post = Post.find_by(ig_shortcode: "MT1")
+    assert_equal "Video", post.media_type
+    assert_equal "clips", post.product_type
+  end
+
+  test "re-ingesting without media fields keeps what is already known" do
+    raw = item(shortcode: "MT2", caption: "Tattoo by @mtartist")
+    InstagramIngestor.new([ raw.merge(type: "Image") ], attach_images: false).call
+    # A later payload lacking the field must not blank the stored value.
+    InstagramIngestor.new([ raw ], attach_images: false).call
+
+    assert_equal "Image", Post.find_by(ig_shortcode: "MT2").media_type
+  end
 end

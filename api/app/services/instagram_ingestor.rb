@@ -57,6 +57,10 @@ class InstagramIngestor
       posted_at:  item[:posted_at],
       artist:     artist
     )
+    # Only fill these when the source supplied them, so re-ingesting an item
+    # from a payload that lacks the fields does not blank out what we know.
+    post.media_type   = item[:media_type]   if item[:media_type].present?
+    post.product_type = item[:product_type] if item[:product_type].present?
     post.save!
 
     new_record ? (@result.posts_created += 1) : (@result.posts_updated += 1)
@@ -100,7 +104,11 @@ class InstagramIngestor
       url:        h[:url] || h[:postUrl],
       image_url:  h[:displayUrl] || h[:imageUrl] || h[:image_url] || first_image(h[:images]),
       posted_at:  parse_time(h[:timestamp] || h[:takenAt] || h[:posted_at]),
-      owner:      h[:ownerUsername] || h[:owner_username] || h.dig(:owner, :username)
+      owner:      h[:ownerUsername] || h[:owner_username] || h.dig(:owner, :username),
+      # Kept verbatim: a Reel is Video + productType "clips", but many Reels are
+      # genuine work, so this is a classifier feature, not a filter.
+      media_type:   (h[:type] || h[:mediaType]).presence,
+      product_type: (h[:productType] || h[:product_type]).presence
     }
   end
 
