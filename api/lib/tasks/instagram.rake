@@ -145,6 +145,12 @@ namespace :instagram do
                 next if id.nil?
 
                 if row["error"]
+                  # Vision could not decode the image: deterministic, not
+                  # transient, so stamp it. Leaving it unstamped would put it
+                  # back at the head of every future pass forever. A download
+                  # failure earlier IS transient and is deliberately left
+                  # unstamped so the next run retries it.
+                  Post.where(id: id).update_all(ocr_at: Time.current, updated_at: Time.current)
                   lock.synchronize { failed += 1 }
                   next
                 end
@@ -154,9 +160,10 @@ namespace :instagram do
                   ocr_elongation: row["mean_elongation"],
                   ocr_at: Time.current, updated_at: Time.current
                 )
-                overlay = row["mean_elongation"].to_f >= Post::OVERLAY_ELONGATION &&
-                          row["mean_height"].to_f < Post::OVERLAY_MAX_HEIGHT &&
-                          row["text"].to_s.length >= Post::OVERLAY_MIN_CHARS
+                overlay = Post.overlay_shape?(
+                  elongation: row["mean_elongation"], mean_height: row["mean_height"],
+                  lines: row["lines"], text: row["text"]
+                )
                 lock.synchronize do
                   done += 1
                   texty += 1 if overlay
@@ -182,7 +189,7 @@ namespace :instagram do
     flagged = Post.text_overlay.count
     puts "Scanned #{scanned} images. #{flagged} match the overlay rule " \
          "(elongation >= #{Post::OVERLAY_ELONGATION}, mean height < #{Post::OVERLAY_MAX_HEIGHT}, " \
-         "#{Post::OVERLAY_MIN_CHARS}+ chars).\n"
+         "#{Post::OVERLAY_MIN_LINES}+ lines, #{Post::OVERLAY_MIN_CHARS}+ chars).\n"
 
     puts "  shape of detected text        posts"
     [ [ "no text",                     Post.ocr_done.where(ocr_lines: [ nil, 0 ]) ],

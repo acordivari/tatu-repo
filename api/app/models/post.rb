@@ -29,7 +29,13 @@ class Post < ApplicationRecord
   # area than an Instagram year-in-review screenshot.
   OVERLAY_ELONGATION = 6.0   # mean line width/height; overlays 10-12, tattoos 1-2
   OVERLAY_MAX_HEIGHT = 0.06  # mean line height; overlays 0.02-0.04, tattoos 0.10+
-  OVERLAY_MIN_CHARS  = 12    # ignore one-word detections and OCR noise on linework
+  # Volume thresholds exist to spare WATERMARKED WORK. Shape alone flags an
+  # artist's own signature ("@familyinktattoo", "REBECCA BONACI") and short
+  # captions on genuine photos ("Over 3yrs healed") — 365 of them in prod, all
+  # real work. Flyers, booking notices and screenshots carry several wordy
+  # lines; a signature carries one short one.
+  OVERLAY_MIN_CHARS  = 40
+  OVERLAY_MIN_LINES  = 3
 
   # Stored image, not yet OCR'd. The image blob is immutable once attached, so
   # a null stamp is the whole condition — there is no "re-OCR when the source
@@ -43,8 +49,18 @@ class Post < ApplicationRecord
     ocr_done
       .where(ocr_elongation: OVERLAY_ELONGATION..)
       .where(ocr_mean_height: ...OVERLAY_MAX_HEIGHT)
+      .where(ocr_lines: OVERLAY_MIN_LINES..)
       .where("length(ocr_text) >= ?", OVERLAY_MIN_CHARS)
   }
+
+  # Same judgement as the scope, for callers holding raw OCR output rather than
+  # a persisted row. Kept beside the scope so the two cannot drift.
+  def self.overlay_shape?(elongation:, mean_height:, lines:, text:)
+    elongation.to_f >= OVERLAY_ELONGATION &&
+      mean_height.to_f < OVERLAY_MAX_HEIGHT &&
+      lines.to_i >= OVERLAY_MIN_LINES &&
+      text.to_s.length >= OVERLAY_MIN_CHARS
+  end
 
   # The canonical "tattoo by @handle" attribution pattern used by the
   # @blackworkers feed. Tolerates "tattoo/tattoos/tat by", an optional

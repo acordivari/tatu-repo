@@ -41,13 +41,37 @@ class PostTest < ActiveSupport::TestCase
   end
   # Geometry, not amount, is what separates a burned-in overlay from lettering
   # tattooed on skin. These cases are measured from real production images.
-  test "text_overlay flags wide thin caption lines" do
+  test "text_overlay flags a wordy multi-line caption block" do
     p = Post.create!(ig_shortcode: "ovl1", ocr_at: Time.current,
-                     ocr_text: "YOU RECEIVED 1.3M LIKES IN 2020!",
+                     ocr_text: "TOP NINE 2020\nYOU RECEIVED 1.3M LIKES IN 2020!\n20.9k\n20.6k",
                      ocr_text_area: 0.043, ocr_lines: 4,
                      ocr_mean_height: 0.023, ocr_elongation: 12.2)
 
     assert_includes Post.text_overlay, p
+  end
+
+  test "text_overlay spares a watermark on a real work photo" do
+    # Overlay-shaped text, but one short line: an artist signature, not junk.
+    p = Post.create!(ig_shortcode: "wm1", ocr_at: Time.current,
+                     ocr_text: "@familyinktattoo", ocr_text_area: 0.010,
+                     ocr_lines: 1, ocr_mean_height: 0.028, ocr_elongation: 7.4)
+
+    assert_not_includes Post.text_overlay, p
+  end
+
+  test "text_overlay spares a short caption on a healed-tattoo photo" do
+    p = Post.create!(ig_shortcode: "cap1", ocr_at: Time.current,
+                     ocr_text: "Over 3yrs healed", ocr_text_area: 0.012,
+                     ocr_lines: 2, ocr_mean_height: 0.030, ocr_elongation: 8.1)
+
+    assert_not_includes Post.text_overlay, p
+  end
+
+  test "overlay_shape? matches the scope for unpersisted OCR output" do
+    assert Post.overlay_shape?(elongation: 12.2, mean_height: 0.023, lines: 4,
+                               text: "TOP NINE 2020 YOU RECEIVED 1.3M LIKES IN 2020!")
+    assert_not Post.overlay_shape?(elongation: 7.4, mean_height: 0.028, lines: 1,
+                                   text: "@familyinktattoo")
   end
 
   test "text_overlay spares a lettering tattoo despite more text area" do
