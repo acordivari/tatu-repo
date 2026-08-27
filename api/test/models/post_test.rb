@@ -104,4 +104,35 @@ class PostTest < ActiveSupport::TestCase
 
     assert_not_includes Post.needs_ocr.map(&:ig_shortcode), "scanned1"
   end
+  test "classifier_stale catches both unclassified and older-classifier rows" do
+    fresh = Post.create!(ig_shortcode: "cls_fresh", classified_at: Time.current,
+                         content_kind: "work", classifier_version: "v2")
+    old   = Post.create!(ig_shortcode: "cls_old", classified_at: Time.current,
+                         content_kind: "work", classifier_version: "v1")
+    never = Post.create!(ig_shortcode: "cls_never")
+
+    stale = Post.classifier_stale("v2")
+    assert_not_includes stale, fresh
+    assert_includes stale, old
+    assert_includes stale, never
+  end
+
+  test "not_work covers OCR overlays and non-work verdicts, and spares work" do
+    overlay = Post.create!(ig_shortcode: "nw_overlay", ocr_at: Time.current,
+                           ocr_text: "BOOKING OPEN APRIL - JUNE email me to book",
+                           ocr_lines: 4, ocr_mean_height: 0.03, ocr_elongation: 12.0)
+    person  = Post.create!(ig_shortcode: "nw_person", classified_at: Time.current,
+                           content_kind: "person")
+    work    = Post.create!(ig_shortcode: "nw_work", classified_at: Time.current,
+                           content_kind: "work")
+    lettering = Post.create!(ig_shortcode: "nw_lettering", ocr_at: Time.current,
+                             ocr_text: "THERE BETTER BE DOGS", ocr_lines: 4,
+                             ocr_mean_height: 0.122, ocr_elongation: 1.5)
+
+    hidden = Post.not_work
+    assert_includes hidden, overlay
+    assert_includes hidden, person
+    assert_not_includes hidden, work
+    assert_not_includes hidden, lettering
+  end
 end

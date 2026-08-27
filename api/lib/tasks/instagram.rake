@@ -181,6 +181,98 @@ namespace :instagram do
     puts "Review before filtering anything: rake instagram:ocr_report"
   end
 
+  desc "Classify images as work/person/promo/other via Claude vision (COSTS MONEY). " \
+       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | notext | all"
+  task :classify_images, %i[limit scope] => :environment do |_t, args|
+    abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
+
+    rel = Post.classifier_stale(WorkImageClassifier::VERSION).joins(:image_attachment)
+    rel = case args[:scope].presence || "ambiguous"
+          when "ambiguous"
+            # The band OCR provably cannot resolve: tall text is a large-type
+            # promo card or a lettering tattoo, and only a picture tells them apart.
+            rel.where(ocr_mean_height: 0.06..)
+          when "notext"  then rel.where("ocr_text IS NULL OR length(ocr_text) = 0")
+          when "all"     then rel
+          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|notext|all)."
+          end
+    rel = rel.limit(args[:limit].to_i) if args[:limit].present?
+    ids = rel.pluck(:id)
+    abort "Nothing to classify for that scope." if ids.empty?
+
+    est = ids.size * 0.001
+    puts "Classifying #{ids.size} images with #{WorkImageClassifier::MODEL} " \
+         "(~$#{format('%.2f', est)} — measured at ~$0.001/image)…"
+
+    classifier = WorkImageClassifier.new
+    threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)
+    queue = Queue.new
+    ids.each { |id| queue << id }
+    tally = Hash.new(0)
+    done = failed = 0
+    lock = Mutex.new
+
+    workers = threads.times.map do
+      Thread.new do
+        while (id = queue.pop(true) rescue nil)
+          ActiveRecord::Base.connection_pool.with_connection do
+            post = Post.with_image_blobs.find(id)
+            bytes = WorkImageClassifier.downscale(card_bytes(post))
+            verdict = classifier.classify(bytes)
+            if verdict.nil?
+              # No verdict means unknown. Deliberately NOT stamped: leaving it
+              # unclassified retries next run, where defaulting it to a kind
+              # would quietly mislabel work as junk.
+              lock.synchronize { failed += 1 }
+            else
+              post.update_columns(
+                content_kind: verdict.kind, content_confidence: verdict.confidence,
+                classified_at: Time.current, classifier_version: WorkImageClassifier::VERSION,
+                updated_at: Time.current
+              )
+              lock.synchronize { done += 1; tally[verdict.kind] += 1 }
+            end
+          rescue StandardError => e
+            lock.synchronize { failed += 1 }
+            Rails.logger.warn("[classify] post #{id}: #{e.class} #{e.message}")
+          end
+          lock.synchronize do
+            print "\r  #{done + failed}/#{ids.size}  " \
+                  "#{tally.map { |k, v| "#{k}:#{v}" }.join(' ')}  failed:#{failed}  " \
+                  "$#{format('%.2f', classifier.cost_usd)}"
+          end
+        end
+      end
+    end
+    workers.each(&:join)
+
+    puts "\nDone. #{done} classified, #{failed} unresolved (left for a re-run). " \
+         "Cost: $#{format('%.2f', classifier.cost_usd)}."
+    puts "Review before hiding anything: rake instagram:classify_report"
+  end
+
+  desc "Show what the vision classifier decided, so its verdicts can be checked before use."
+  task classify_report: :environment do
+    total = Post.classified.count
+    abort "Nothing classified yet — run rake instagram:classify_images first." if total.zero?
+
+    puts "Classified #{total} images.\n"
+    Post.classified.group(:content_kind).count.sort_by { |_, v| -v }.each do |kind, n|
+      puts format("  %-8s %6d  (%.1f%%)", kind, n, 100.0 * n / total)
+    end
+
+    puts "\nLowest-confidence verdicts — check these first:"
+    Post.classified.where.not(content_confidence: nil)
+        .order(:content_confidence).limit(10).each do |p|
+      puts format("  %.2f  %-8s %-12s %s", p.content_confidence, p.content_kind,
+                  p.ig_shortcode.to_s[0, 12], p.artist&.handle)
+    end
+
+    hidden = Post.not_work.count
+    puts "\n#{hidden} images would be hidden by Post.not_work " \
+         "(OCR overlays + non-work verdicts). Nothing is filtered from the site yet."
+  end
+
   desc "Summarise what OCR found, so the overlay rule can be judged before it is used."
   task ocr_report: :environment do
     scanned = Post.ocr_done.count

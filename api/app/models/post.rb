@@ -53,6 +53,22 @@ class Post < ApplicationRecord
       .where("length(ocr_text) >= ?", OVERLAY_MIN_CHARS)
   }
 
+  scope :classified,   -> { where.not(classified_at: nil) }
+  scope :unclassified, -> { where(classified_at: nil) }
+  # Stale once the classifier changes: a new prompt or model can reach a
+  # different verdict, so the stamp alone must never decide what to skip.
+  scope :classifier_stale, lambda { |version|
+    where(classified_at: nil).or(where.not(classifier_version: version))
+  }
+  scope :of_kind, ->(kind) { where(content_kind: kind) }
+
+  # Images the directory should not show: an overlay by OCR, or judged not to
+  # be work by the vision pass. Kept as one place so the site and the review
+  # tooling cannot disagree about what is hidden.
+  scope :not_work, lambda {
+    text_overlay.or(where(content_kind: %w[person promo other]))
+  }
+
   # Same judgement as the scope, for callers holding raw OCR output rather than
   # a persisted row. Kept beside the scope so the two cannot drift.
   def self.overlay_shape?(elongation:, mean_height:, lines:, text:)
