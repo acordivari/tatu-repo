@@ -182,7 +182,7 @@ namespace :instagram do
   end
 
   desc "Classify images as work/person/promo/other via Claude vision (COSTS MONEY). " \
-       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | notext | all"
+       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | notext | all"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
     abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
 
@@ -193,8 +193,13 @@ namespace :instagram do
             # promo card or a lettering tattoo, and only a picture tells them apart.
             rel.where(ocr_mean_height: 0.06..)
           when "notext"  then rel.where("ocr_text IS NULL OR length(ocr_text) = 0")
+          when "nonwork"
+            # Re-check only verdicts that would HIDE an image. When the prompt
+            # improves, this is where a wrong call is expensive: a hidden work
+            # photo is a real loss, while a junk image left visible is not.
+            rel.where(content_kind: %w[person promo other])
           when "all"     then rel
-          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|notext|all)."
+          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|notext|all)."
           end
     rel = rel.limit(args[:limit].to_i) if args[:limit].present?
     ids = rel.pluck(:id)

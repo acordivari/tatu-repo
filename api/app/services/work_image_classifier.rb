@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v1"
+  VERSION = "haiku45-v2"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -34,23 +34,31 @@ class WorkImageClassifier
     Reply with ONLY a JSON object: {"kind": "...", "confidence": 0.0-1.0}
 
     "kind" must be exactly one of:
-      "work"   - the subject is tattoo art: a tattoo on skin (fresh, healed, or
-                 in progress), or the artist's own design, flash sheet, or
-                 stencil. Lettering and script tattoos count as work. A person
-                 may be visible, as long as the tattoo is the subject.
-      "person" - the subject is a person, not a tattoo: a selfie, a portrait, a
-                 mirror photo, a lifestyle or holiday snapshot, or a frame from
-                 a talking-to-camera video. Still "person" even when the people
-                 shown happen to have tattoos, and even when the image carries
-                 caption text.
+      "work"   - tattoo art. EITHER a tattoo on skin (fresh, healed, or in
+                 progress) OR a piece of drawn art: a design, flash sheet,
+                 stencil, sketch, painting or digital illustration. Lettering
+                 and script tattoos count. A person may be visible, as long as
+                 the tattoo is the subject.
+      "person" - a PHOTOGRAPH whose subject is a real person rather than a
+                 tattoo: a selfie, a portrait, a mirror photo, a lifestyle or
+                 holiday snapshot, or a frame from a talking-to-camera video.
+                 Still "person" when the people shown happen to have tattoos,
+                 and when the image carries caption text.
       "promo"  - no real subject, just a message: a flyer, poster, price list,
                  booking announcement, flash-day advert, meme, screenshot of an
-                 app or chat, product advert, or a plain card of text.
+                 app or chat, product advert, merchandise, or a card of text.
       "other"  - none of the above: studio interiors, equipment, pets, food,
-                 scenery, artwork that is clearly not tattoo-related.
+                 scenery, or art in a medium the artist does not tattoo with.
 
     Judge the SUBJECT of the photo, not whether tattoos appear anywhere in it.
     A mirror selfie of a heavily tattooed artist is "person", not "work".
+
+    DRAWN ART IS ALWAYS "work", whatever it depicts. A drawing of a face, a
+    figure, a skull or an animal is the artist's design — it is "work", never
+    "person". A design on a plain or paper background is a flash sheet — it is
+    "work", never "promo". Only call it "promo" if the image exists to carry a
+    message (dates, prices, an announcement, a logo, merchandise for sale)
+    rather than to show a design someone could be tattooed with.
 
     "confidence" is your certainty, 0.0 to 1.0. Use below 0.6 when genuinely
     unsure — a wrong "person" verdict hides real work, so prefer a low
