@@ -31,4 +31,20 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
   test "version is recorded so a prompt change can invalidate past verdicts" do
     assert WorkImageClassifier::VERSION.present?
   end
+
+  test "prompt carries OCR text only when there is some" do
+    assert_equal WorkImageClassifier::INSTRUCTIONS, WorkImageClassifier.prompt(nil)
+    assert_equal WorkImageClassifier::INSTRUCTIONS, WorkImageClassifier.prompt("  \n ")
+
+    prompt = WorkImageClassifier.prompt("TORONTO\nSUMMER FALL 2026\nBOOKING AVAILABLE")
+    assert prompt.start_with?(WorkImageClassifier::INSTRUCTIONS)
+    assert_includes prompt, "TORONTO SUMMER FALL 2026 BOOKING AVAILABLE"
+  end
+
+  test "prompt truncates long OCR text" do
+    prompt = WorkImageClassifier.prompt("word " * 500)
+    assert_operator prompt.length, :<, WorkImageClassifier::INSTRUCTIONS.length +
+                                       WorkImageClassifier::OCR_CONTEXT.length +
+                                       WorkImageClassifier::OCR_MAX_CHARS
+  end
 end

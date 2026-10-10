@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v2"
+  VERSION = "haiku45-v3"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -65,6 +65,28 @@ class WorkImageClassifier
     confidence over a confident guess.
   TXT
 
+  # Appended when OCR found text in the image. The model sees a 512px copy, at
+  # which a poster's dates and "books open" line are often unreadable — so an
+  # illustrated tour poster looked like flash and v2's drawn-art rule pulled it
+  # back to "work". OCR read the full-size card, so it can see what the model
+  # cannot.
+  OCR_CONTEXT = <<~TXT.freeze
+    TEXT IN THE IMAGE. OCR read this text burned into the image (it may be
+    partial or misread):
+    """
+    %<text>s
+    """
+    Use it to tell a message from a design. Dates, prices, "books open",
+    "booking", "guest spot", tour cities, event names, discount codes or
+    product names mean the image exists to carry a message, so it is "promo"
+    even when it is illustrated. A signature, an @handle watermark, a short
+    title, or lettering that is itself the tattoo design does not make an
+    image "promo".
+  TXT
+
+  # Long enough for a flyer's key lines; past this it is token cost, not signal.
+  OCR_MAX_CHARS = 400
+
   # Haiku 4.5 pricing ($/million tokens) for cost reporting.
   PRICE_IN = 1.0
   PRICE_OUT = 5.0
@@ -97,11 +119,11 @@ class WorkImageClassifier
     (input_tokens / 1_000_000.0 * PRICE_IN) + (output_tokens / 1_000_000.0 * PRICE_OUT)
   end
 
-  # Classify one image given its JPEG bytes. Returns a Verdict, or nil if the
-  # call failed or the model returned something unusable — callers must treat
-  # nil as "unknown" and leave the post alone rather than defaulting it to a
-  # kind, which would quietly mislabel work.
-  def classify(jpeg_bytes)
+  # Classify one image given its JPEG bytes and any OCR text read from it.
+  # Returns a Verdict, or nil if the call failed or the model returned
+  # something unusable — callers must treat nil as "unknown" and leave the post
+  # alone rather than defaulting it to a kind, which would quietly mislabel work.
+  def classify(jpeg_bytes, ocr_text: nil)
     message = @client.messages.create(
       model: @model,
       max_tokens: 128,
@@ -111,7 +133,7 @@ class WorkImageClassifier
           { type: "image",
             source: { type: "base64", media_type: "image/jpeg",
                       data: Base64.strict_encode64(jpeg_bytes) } },
-          { type: "text", text: INSTRUCTIONS }
+          { type: "text", text: self.class.prompt(ocr_text) }
         ]
       } ]
     )
@@ -123,6 +145,15 @@ class WorkImageClassifier
   rescue Anthropic::Errors::APIError => e
     Rails.logger.warn("[WorkImageClassifier] #{e.class}: #{e.message}")
     nil
+  end
+
+  # The instructions, plus the OCR block when there is text worth reading.
+  # Whitespace is collapsed because OCR emits one line per detected box.
+  def self.prompt(ocr_text)
+    text = ocr_text.to_s.squish.truncate(OCR_MAX_CHARS)
+    return INSTRUCTIONS if text.blank?
+
+    INSTRUCTIONS + "\n" + format(OCR_CONTEXT, text: text)
   end
 
   # Downscale before sending: image tokens scale with pixel count, so this is

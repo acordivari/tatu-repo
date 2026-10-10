@@ -182,7 +182,8 @@ namespace :instagram do
   end
 
   desc "Classify images as work/person/promo/other via Claude vision (COSTS MONEY). " \
-       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | notext | all"
+       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | notext | all " \
+       "(narrow with IDS=1,2 or ARTIST=handle)"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
     abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
 
@@ -198,9 +199,28 @@ namespace :instagram do
             # improves, this is where a wrong call is expensive: a hidden work
             # photo is a real loss, while a junk image left visible is not.
             rel.where(content_kind: %w[person promo other])
+          when "risky"
+            # Where non-work concentrates. Reel covers (tall frames, or Apify's
+            # "clips") carry the talking-head and lifestyle shots; any burned-in
+            # text marks flyers and memes. On a random sample of artists' own
+            # posts outside this band, 59 of 60 were real work — classifying
+            # those costs ~3x as much to find a fraction of the junk.
+            rel.joins(image_attachment: :blob).where(<<~SQL.squish)
+              posts.product_type = 'clips'
+              OR length(posts.ocr_text) > 0
+              OR (active_storage_blobs.metadata::jsonb->>'height')::float >=
+                 1.5 * NULLIF((active_storage_blobs.metadata::jsonb->>'width')::float, 0)
+            SQL
           when "all"     then rel
-          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|notext|all)."
+          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|notext|all)."
           end
+    # Narrow to a known set (validating a prompt change on images already
+    # inspected by eye): IDS=1,2,3 and/or ARTIST=handle1,handle2.
+    rel = rel.where(id: ENV["IDS"].split(",").map(&:to_i)) if ENV["IDS"].present?
+    if ENV["ARTIST"].present?
+      handles = ENV["ARTIST"].split(",").map { |h| Artist.normalize_handle(h) }
+      rel = rel.where(artist_id: Artist.where(handle: handles).select(:id))
+    end
     rel = rel.limit(args[:limit].to_i) if args[:limit].present?
     ids = rel.pluck(:id)
     abort "Nothing to classify for that scope." if ids.empty?
@@ -223,7 +243,7 @@ namespace :instagram do
           ActiveRecord::Base.connection_pool.with_connection do
             post = Post.with_image_blobs.find(id)
             bytes = WorkImageClassifier.downscale(card_bytes(post))
-            verdict = classifier.classify(bytes)
+            verdict = classifier.classify(bytes, ocr_text: post.ocr_text)
             if verdict.nil?
               # No verdict means unknown. Deliberately NOT stamped: leaving it
               # unclassified retries next run, where defaulting it to a kind
