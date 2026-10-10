@@ -19,7 +19,7 @@ module Api
       # GET /api/v1/artists/:id  (id may be a numeric id or a handle)
       def show
         artist = find_artist
-        posts = artist.posts.recent.limit(60).with_image_blobs
+        posts = artist.posts.shown.recent.limit(60).with_image_blobs
         render json: ArtistSerializer.new(artist).as_detail(posts: posts)
       end
 

@@ -57,4 +57,19 @@ class ArtistsApiTest < ActionDispatch::IntegrationTest
     get "/api/v1/artists", params: { country: "United States", region: "California" }
     assert_equal facet["California"].to_s, response.headers["X-Total-Count"]
   end
+
+  test "artist gallery and posts feed leave out images judged not to be work" do
+    artist = Artist.find_by!(handle: "us_ca_1")
+    Post.create!(ig_shortcode: "gal_work", artist: artist, content_kind: "work", posted_at: 3.days.ago)
+    Post.create!(ig_shortcode: "gal_unjudged", artist: artist, posted_at: 2.days.ago)
+    Post.create!(ig_shortcode: "gal_selfie", artist: artist, content_kind: "person", posted_at: 1.day.ago)
+
+    get "/api/v1/artists/us_ca_1"
+    assert_response :success
+    assert_equal %w[gal_unjudged gal_work], JSON.parse(response.body)["posts"].map { |p| p["shortcode"] }
+
+    get "/api/v1/posts", params: { artist: "us_ca_1" }
+    assert_response :success
+    assert_equal %w[gal_unjudged gal_work], JSON.parse(response.body).map { |p| p["shortcode"] }
+  end
 end

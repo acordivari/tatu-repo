@@ -135,4 +135,47 @@ class PostTest < ActiveSupport::TestCase
     assert_not_includes hidden, work
     assert_not_includes hidden, lettering
   end
+
+  test "shown is the complement of not_work, and keeps unjudged posts visible" do
+    overlay = Post.create!(ig_shortcode: "sh_overlay", ocr_at: Time.current,
+                           ocr_text: "BOOKING OPEN APRIL - JUNE email me to book",
+                           ocr_lines: 4, ocr_mean_height: 0.03, ocr_elongation: 12.0)
+    promo   = Post.create!(ig_shortcode: "sh_promo", classified_at: Time.current, content_kind: "promo")
+    work    = Post.create!(ig_shortcode: "sh_work", classified_at: Time.current, content_kind: "work")
+    unjudged = Post.create!(ig_shortcode: "sh_unjudged")
+
+    shown = Post.shown
+    assert_not_includes shown, overlay
+    assert_not_includes shown, promo
+    assert_includes shown, work
+    assert_includes shown, unjudged
+  end
+
+  test "not_work? agrees with the not_work scope row by row" do
+    rows = [
+      Post.create!(ig_shortcode: "nwq_overlay", ocr_at: Time.current,
+                   ocr_text: "TOP NINE 2020\nYOU RECEIVED 1.3M LIKES IN 2020!\n20.9k\n20.6k",
+                   ocr_lines: 4, ocr_mean_height: 0.023, ocr_elongation: 12.2),
+      Post.create!(ig_shortcode: "nwq_watermark", ocr_at: Time.current, ocr_text: "@familyinktattoo",
+                   ocr_lines: 1, ocr_mean_height: 0.028, ocr_elongation: 7.4),
+      Post.create!(ig_shortcode: "nwq_unscanned", ocr_text: "YOU RECEIVED 1.3M LIKES IN 2020! 20.9k 20.6k",
+                   ocr_lines: 4, ocr_mean_height: 0.023, ocr_elongation: 12.2),
+      Post.create!(ig_shortcode: "nwq_person", content_kind: "person"),
+      Post.create!(ig_shortcode: "nwq_other", content_kind: "other"),
+      Post.create!(ig_shortcode: "nwq_work", content_kind: "work"),
+      Post.create!(ig_shortcode: "nwq_bare")
+    ]
+
+    hidden = Post.not_work.pluck(:id)
+    rows.each do |post|
+      assert_equal hidden.include?(post.id), post.not_work?, "disagreement on #{post.ig_shortcode}"
+    end
+  end
+
+  test "credited_to? recognises a curated credit, not the artist's own caption" do
+    artist = Artist.create!(handle: "credited")
+    assert Post.new(caption: "Tattoo by @credited #blackworkers").credited_to?(artist)
+    assert_not Post.new(caption: "Books open for November!").credited_to?(artist)
+    assert_not Post.new(caption: "Tattoo by @someoneelse").credited_to?(artist)
+  end
 end

@@ -65,9 +65,14 @@ class Post < ApplicationRecord
   # Images the directory should not show: an overlay by OCR, or judged not to
   # be work by the vision pass. Kept as one place so the site and the review
   # tooling cannot disagree about what is hidden.
+  NOT_WORK_KINDS = %w[person promo other].freeze
   scope :not_work, lambda {
-    text_overlay.or(where(content_kind: %w[person promo other]))
+    text_overlay.or(where(content_kind: NOT_WORK_KINDS))
   }
+  # What the directory serves. Posts nobody has judged yet stay visible: hiding
+  # them would empty most galleries until the vision pass reaches them, so it
+  # is classifier COVERAGE, not this scope, that keeps junk off the site.
+  scope :shown, -> { where.not(id: not_work.select(:id)) }
 
   # Same judgement as the scope, for callers holding raw OCR output rather than
   # a persisted row. Kept beside the scope so the two cannot drift.
@@ -76,6 +81,25 @@ class Post < ApplicationRecord
       mean_height.to_f < OVERLAY_MAX_HEIGHT &&
       lines.to_i >= OVERLAY_MIN_LINES &&
       text.to_s.length >= OVERLAY_MIN_CHARS
+  end
+
+  # Post.not_work for a loaded row. Serializers walk preloaded associations, so
+  # they need the judgement without a query per artist.
+  def not_work?
+    NOT_WORK_KINDS.include?(content_kind) ||
+      (ocr_at.present? && self.class.overlay_shape?(elongation: ocr_elongation, mean_height: ocr_mean_height,
+                                                    lines: ocr_lines, text: ocr_text))
+  end
+
+  # Someone else credited this post to the artist ("tattoo by @handle") — the
+  # @blackworkers reposts. A person picked it as the artist's tattoo, so it is
+  # work without a verdict. An artist's own posts never credit themselves.
+  def credited_to?(artist)
+    self.class.handle_from_caption(caption) == artist.handle
+  end
+
+  def recency
+    posted_at || created_at
   end
 
   # The canonical "tattoo by @handle" attribution pattern used by the

@@ -5,7 +5,7 @@ module Api
 
       # GET /api/v1/posts?artist=&attributed=
       def index
-        posts = Post.includes(:artist).with_image_blobs.recent
+        posts = Post.shown.includes(:artist).with_image_blobs.recent
         posts = posts.attributed if params[:attributed] == "true"
         if params[:artist].present?
           handle = Artist.normalize_handle(params[:artist])

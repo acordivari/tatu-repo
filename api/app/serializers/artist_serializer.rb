@@ -11,9 +11,9 @@ class ArtistSerializer
   end
 
   # Compact card representation for grids and search results. Pass
-  # preview_post when the newest post is already in hand (see as_detail) to
-  # avoid re-walking the posts association.
-  def as_card(preview_post: newest_post)
+  # preview_post when the posts are already in hand (see as_detail) to avoid
+  # re-walking the posts association.
+  def as_card(preview_post: pick_preview(@artist.posts))
     {
       id:            @artist.id,
       handle:        @artist.handle,
@@ -32,11 +32,11 @@ class ArtistSerializer
 
   # Full representation for the artist detail page (includes recent posts and
   # the studio(s) the artist works at, so the profile can point visitors to the
-  # right shop page for booking). `posts` arrive newest-first, so the first one
-  # doubles as the preview — no second pass over the association.
+  # right shop page for booking). The preview is picked from the same posts, so
+  # there is no second pass over the association.
   def as_detail(posts: [])
-    posts = posts.to_a # one load — .first below must not issue its own query
-    as_card(preview_post: posts.first).merge(
+    posts = posts.to_a # one load — pick_preview must not issue its own query
+    as_card(preview_post: pick_preview(posts)).merge(
       bio:          @artist.bio,
       website:      @artist.website,
       location_raw: @artist.location_raw,
@@ -68,10 +68,15 @@ class ArtistSerializer
            end
   end
 
-  # The artist's most recent post, for the directory thumbnail. Relies on the
-  # controller preloading :posts to avoid N+1 queries.
-  def newest_post
-    @artist.posts.max_by { |p| p.posted_at || p.created_at }
+  # The directory thumbnail (also the link-unfurl image): the newest post known
+  # to be work — a vision "work" verdict or a curated credit — else the newest
+  # post not judged junk. Plain newest-first put artists' latest selfies and
+  # booking cards on the homepage once their own feeds were backfilled.
+  # Relies on the controller preloading :posts to avoid N+1 queries.
+  def pick_preview(posts)
+    shown = posts.reject(&:not_work?)
+    vouched = shown.select { |p| p.content_kind == "work" || p.credited_to?(@artist) }
+    vouched.max_by(&:recency) || shown.max_by(&:recency)
   end
 
   # Minimal marker for the map.
