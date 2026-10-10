@@ -227,11 +227,18 @@ namespace :instagram do
 
   desc "Classify images as work/person/promo/other via Claude vision (COSTS MONEY). " \
        "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | notext | all " \
-       "(narrow with IDS=1,2 or ARTIST=handle)"
+       "(narrow with IDS=1,2, ARTIST=handle or KIND=person; RECHECK=1 re-judges older-version verdicts)"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
     abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
 
-    rel = Post.classifier_stale(WorkImageClassifier::VERSION).joins(:image_attachment)
+    # Never-judged images only, unless asked. A prompt change makes older
+    # verdicts stale, but re-judging them is a deliberate, budgeted act — not a
+    # side effect of the next routine post-ingest pass, which after the v3->v4
+    # bump would have re-billed ~6,900 v3 verdicts ($8.61) to fix ~700.
+    # RECHECK=1, or the nonwork scope (which exists to re-check), opts in.
+    recheck = ENV["RECHECK"].present? || args[:scope] == "nonwork"
+    rel = (recheck ? Post.classifier_stale(WorkImageClassifier::VERSION) : Post.unclassified)
+          .joins(:image_attachment)
     rel = case args[:scope].presence || "ambiguous"
           when "ambiguous"
             # The band OCR provably cannot resolve: tall text is a large-type
@@ -259,8 +266,9 @@ namespace :instagram do
           else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|notext|all)."
           end
     # Narrow to a known set (validating a prompt change on images already
-    # inspected by eye): IDS=1,2,3 and/or ARTIST=handle1,handle2.
+    # inspected by eye): IDS=1,2,3, KIND=person, and/or ARTIST=handle1,handle2.
     rel = rel.where(id: ENV["IDS"].split(",").map(&:to_i)) if ENV["IDS"].present?
+    rel = rel.where(content_kind: ENV["KIND"].split(",")) if ENV["KIND"].present?
     if ENV["ARTIST"].present?
       handles = ENV["ARTIST"].split(",").map { |h| Artist.normalize_handle(h) }
       rel = rel.where(artist_id: Artist.where(handle: handles).select(:id))
@@ -269,9 +277,11 @@ namespace :instagram do
     ids = rel.pluck(:id)
     abort "Nothing to classify for that scope." if ids.empty?
 
-    est = ids.size * 0.001
+    # Measured on v3's 6,526-image risky pass: the OCR block lengthens the
+    # prompt, so text-bearing images run above v2's ~$0.0011.
+    est = ids.size * 0.0013
     puts "Classifying #{ids.size} images with #{WorkImageClassifier::MODEL} " \
-         "(~$#{format('%.2f', est)} — measured at ~$0.001/image)…"
+         "(~$#{format('%.2f', est)} — measured at ~$0.0013/image)…"
 
     classifier = WorkImageClassifier.new
     threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)

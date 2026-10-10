@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v3"
+  VERSION = "haiku45-v4"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -41,9 +41,9 @@ class WorkImageClassifier
                  the tattoo is the subject.
       "person" - a PHOTOGRAPH whose subject is a real person rather than a
                  tattoo: a selfie, a portrait, a mirror photo, a lifestyle or
-                 holiday snapshot, or a frame from a talking-to-camera video.
-                 Still "person" when the people shown happen to have tattoos,
-                 and when the image carries caption text.
+                 holiday snapshot, the artist at work, or a frame from a
+                 talking-to-camera video. Still "person" when the people shown
+                 happen to have tattoos, and when the image carries caption text.
       "promo"  - no real subject, just a message: a flyer, poster, price list,
                  booking announcement, flash-day advert, meme, screenshot of an
                  app or chat, product advert, merchandise, or a card of text.
@@ -52,6 +52,13 @@ class WorkImageClassifier
 
     Judge the SUBJECT of the photo, not whether tattoos appear anywhere in it.
     A mirror selfie of a heavily tattooed artist is "person", not "work".
+
+    SHOWING A TATTOO IS "work". When someone poses so a tattoo can be seen — a
+    sleeve held out, a back, chest, belly or leg piece turned to the camera, a
+    healed piece on a client — the tattoo is the reason for the photo, so it is
+    "work" even with their face, outfit and surroundings in frame. Call it
+    "person" only when the photo is about the person and any tattoo is
+    incidental.
 
     DRAWN ART IS ALWAYS "work", whatever it depicts. A drawing of a face, a
     figure, a skull or an animal is the artist's design — it is "work", never
