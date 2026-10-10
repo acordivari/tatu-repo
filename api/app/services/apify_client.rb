@@ -43,19 +43,23 @@ class ApifyClient
 
   # Scrape recent posts FROM specific profiles (their own work). Returns raw
   # post items (each carries ownerUsername for owner-based attribution).
-  def posts_for(handles, per_user: 6, timeout: DEFAULT_TIMEOUT)
+  #
+  # newer_than (a Date) stops each profile at that date. Billing is per dataset
+  # item, so without it a re-scrape re-bills every post we already hold just to
+  # reach the new ones. The floor applies to the whole run, so callers batch
+  # handles that share one. Pinned posts can still come back below it.
+  def posts_for(handles, per_user: 6, newer_than: nil, timeout: DEFAULT_TIMEOUT)
     handles = Array(handles).map { |h| Artist.normalize_handle(h) }.compact.uniq
     return [] if handles.empty?
 
-    run(
-      {
-        directUrls:    handles.map { |h| "https://www.instagram.com/#{h}/" },
-        resultsType:   "posts",
-        resultsLimit:  per_user, # per profile
-        addParentData: true      # include ownerUsername on each post
-      },
-      timeout: timeout
-    )
+    input = {
+      directUrls:    handles.map { |h| "https://www.instagram.com/#{h}/" },
+      resultsType:   "posts",
+      resultsLimit:  per_user, # per profile
+      addParentData: true      # include ownerUsername on each post
+    }
+    input[:onlyPostsNewerThan] = newer_than.to_date.iso8601 if newer_than
+    run(input, timeout: timeout)
   end
 
   # Scrape MANY artist profiles in a single run (the efficient path for bulk

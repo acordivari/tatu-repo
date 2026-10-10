@@ -82,14 +82,7 @@ namespace :instagram do
       r = InstagramIngestor.new(items, attach_images: false, attribute_by: :owner,
                                 create_missing: false).call
       new_posts += r.posts_created
-      # Attach inline (throttled) so images land in the configured store (R2 in
-      # prod) before the task exits, rather than via the in-process async queue.
-      got = 0
-      Post.needs_image.where(artist_id: batch.map { |b| b[:id] }).find_each do |post|
-        AttachPostImageJob.perform_now(post.id)
-        got += 1 if post.reload.image.attached?
-        sleep 0.3
-      end
+      got = attach_images_for(batch.map { |b| b[:id] })
       stored += got
       puts "  batch #{i}/#{(rows.size / 50.0).ceil}: #{items.size} results, " \
            "+#{r.posts_created} posts, +#{got} images (totals: #{new_posts} posts, #{stored} images)"
@@ -103,6 +96,57 @@ namespace :instagram do
     abort "APIFY_TOKEN is not set. Add it to api/.env."
   rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
     abort "Apify run failed: #{e.message} (progress so far is saved; re-run to continue)"
+  end
+
+  desc "Pull posts artists made since their last fetch, billed only for the new ones, " \
+       "thinnest galleries first. Usage: rake instagram:refresh_work[per_user,limit,min_gap_days]"
+  task :refresh_work, %i[per_user limit min_gap] => :environment do |_t, args|
+    per_user = (args[:per_user].presence || 12).to_i
+    min_gap = (args[:min_gap].presence || 14).to_i
+    rows = artists_to_refresh(min_gap.days)
+    # ARTIST=a,b narrows to a hand-picked sample — probing the cost per artist
+    # across cohorts before sizing a full run.
+    if ENV["ARTIST"].present?
+      wanted = ENV["ARTIST"].split(",").map { |h| Artist.normalize_handle(h) }.to_set
+      rows = rows.select { |r| wanted.include?(r[:handle]) }
+    end
+    rows = rows.first(args[:limit].to_i) if args[:limit].present?
+    abort "No artists due a refresh (every artist was fetched within #{min_gap} days)." if rows.empty?
+
+    est = format("%.2f", rows.size * per_user / 1000.0 * APIFY_USD_PER_1K)
+    puts "Refreshing #{rows.size} artists, up to #{per_user} new posts each " \
+         "(<= #{rows.size * per_user} results, worst case ~$#{est}; the date floor keeps most far lower)…"
+
+    client = ApifyClient.new
+    totals = Hash.new(0)
+    # The floor applies per Apify run, so each run carries artists sharing one.
+    batches = rows.group_by { |r| r[:since] }.flat_map { |since, group| group.each_slice(50).map { |b| [ since, b ] } }
+    batches.each_with_index do |(since, batch), i|
+      ids = batch.map { |b| b[:id] }
+      items = client.posts_for(batch.map { |b| b[:handle] }, per_user: per_user, newer_than: since)
+      # Stamped before ingestion, as in backfill_work: a run that dies mid-batch
+      # has still recorded the attempt, so a re-run cannot bill these again.
+      Artist.where(id: ids).update_all(work_fetched_at: Time.current, updated_at: Time.current)
+      r = InstagramIngestor.new(items, attach_images: false, attribute_by: :owner,
+                                create_missing: false).call
+      got = attach_images_for(ids)
+      totals[:results] += items.size
+      totals[:new] += r.posts_created
+      totals[:rebilled] += r.posts_updated
+      totals[:images] += got
+      puts "  batch #{i + 1}/#{batches.size} (since #{since || 'first fetch'}): #{items.size} results, " \
+           "+#{r.posts_created} new posts, #{r.posts_updated} already held, +#{got} images"
+    end
+
+    puts "\nDone. #{totals[:results]} results billed (~$#{format('%.2f', totals[:results] / 1000.0 * APIFY_USD_PER_1K)}): " \
+         "#{totals[:new]} new posts, #{totals[:images]} images stored, " \
+         "#{totals[:rebilled]} re-billed posts we already held (pinned or same-day)."
+    puts "Next: rake instagram:ocr_images, then rake 'instagram:classify_images[,risky]', " \
+         "then THREADS=8 rake storage:preprocess_variants"
+  rescue ApifyClient::NotConfigured
+    abort "APIFY_TOKEN is not set. Add it to api/.env."
+  rescue ApifyClient::RunFailed, ApifyClient::RequestError => e
+    abort "Apify run failed: #{e.message} (attempted artists are stamped; re-run to continue)"
   end
 
   desc "OCR stored post images to spot burned-in overlays (local, free). Usage: rake instagram:ocr_images[limit]"
@@ -557,8 +601,39 @@ namespace :instagram do
   #
   # retry_after (an ActiveSupport::Duration) lets long-idle artists back in
   # once they have plausibly posted new work.
+  # Stored images per artist that the site will actually show. Targets count
+  # these, not raw posts, so an artist whose gallery lost its junk to the
+  # classifier is topped up rather than treated as already full.
+  def shown_image_counts
+    Post.shown.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+  end
+
+  # Every artist not fetched within min_gap, thinnest shown gallery first, each
+  # with the date to fetch from: their last fetch, or nil when their own feed
+  # has never been fetched (everything there is new to us).
+  def artists_to_refresh(min_gap)
+    counts = shown_image_counts
+    Artist.where(work_fetched_at: nil).or(Artist.where(work_fetched_at: ...min_gap.ago))
+          .pluck(:id, :handle, :work_fetched_at)
+          .map { |id, handle, at| { id: id, handle: handle, since: at&.utc&.to_date, imgs: counts[id] || 0 } }
+          .sort_by { |r| [ r[:imgs], r[:id] ] }
+  end
+
+  # Download and store images inline (throttled) so they land in the configured
+  # store (R2 in prod) before the task exits, rather than via the in-process
+  # async queue. Returns how many were stored.
+  def attach_images_for(artist_ids)
+    got = 0
+    Post.needs_image.where(artist_id: artist_ids).find_each do |post|
+      AttachPostImageJob.perform_now(post.id)
+      got += 1 if post.reload.image.attached?
+      sleep 0.3
+    end
+    got
+  end
+
   def artists_under(target, retry_after: nil)
-    counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+    counts = shown_image_counts
     # work_fetched_at alone decides. It is stamped for the whole batch straight
     # after the Apify call and before ingestion, so a run that dies mid-flight
     # has already recorded the attempt. The old fallback — treating any post
@@ -577,7 +652,7 @@ namespace :instagram do
   # Count of under-target artists the attempt guard is currently excluding, so
   # a run can report what it deliberately skipped rather than silently eliding it.
   def artists_held_back(target, retry_after: nil)
-    counts = Post.joins(:image_attachment).where.not(artist_id: nil).group(:artist_id).count
+    counts = shown_image_counts
     scope = Artist.where.not(work_fetched_at: nil)
     scope = scope.where(work_fetched_at: retry_after.ago..) if retry_after
     scope.pluck(:id).count { |id| (counts[id] || 0) < target }
