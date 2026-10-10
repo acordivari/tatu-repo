@@ -33,4 +33,18 @@ class ApifyClientTest < ActiveSupport::TestCase
       !JSON.parse(req.body).key?("onlyPostsNewerThan")
     end
   end
+
+  test "a 5xx fetching results is retried, not fatal" do
+    stub_start
+    stub_request(:get, %r{api\.apify\.com/v2/datasets/ds1/items})
+      .to_return({ status: 502, body: "Bad Gateway" }, { status: 200, body: "[]" })
+    @client.define_singleton_method(:sleep) { |_| } # skip the retry backoff
+    assert_equal [], @client.posts_for(%w[artist_a], per_user: 12)
+  end
+
+  test "a start-run 5xx is not retried, so it cannot bill a second run" do
+    start = stub_request(:post, %r{/acts/apify~instagram-scraper/runs}).to_return(status: 502, body: "")
+    assert_raises(ApifyClient::RequestError) { @client.posts_for(%w[artist_a], per_user: 12) }
+    assert_requested start, times: 1
+  end
 end

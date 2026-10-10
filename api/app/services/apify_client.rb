@@ -182,20 +182,33 @@ class ApifyClient
     end
   end
 
+  # A 5xx from Apify's API is its gateway blinking, not an answer. GETs are
+  # idempotent, so they retry it like a socket error; a 502 fetching a finished
+  # run's dataset once aborted refresh_work, leaving a billed run uningested.
+  # POST deliberately does not: retrying a start-run could bill a second run.
+  class ServerError < StandardError; end
+
   def get(path, **query)
-    res = with_retries { HTTParty.get("#{BASE}#{path}", query: query.merge(token: @token), timeout: 60) }
+    res = with_retries(also: [ ServerError ]) do
+      r = HTTParty.get("#{BASE}#{path}", query: query.merge(token: @token), timeout: 60)
+      raise ServerError, "GET #{path} returned #{r.code}" if r.code >= 500
+
+      r
+    end
     raise RequestError, "GET #{path} failed (#{res.code})" unless res.success?
 
     JSON.parse(res.body)
+  rescue ServerError => e
+    raise RequestError, e.message
   rescue JSON::ParserError => e
     raise RequestError, "invalid JSON from #{path}: #{e.message}"
   end
 
-  def with_retries(tries: 4)
+  def with_retries(tries: 4, also: [])
     attempt = 0
     begin
       yield
-    rescue *TRANSIENT_ERRORS => e
+    rescue *TRANSIENT_ERRORS, *also => e
       attempt += 1
       raise if attempt >= tries
 
