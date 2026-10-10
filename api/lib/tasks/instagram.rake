@@ -134,7 +134,7 @@ namespace :instagram do
       totals[:new] += r.posts_created
       totals[:rebilled] += r.posts_updated
       totals[:images] += got
-      puts "  batch #{i + 1}/#{batches.size} (since #{since || 'first fetch'}): #{items.size} results, " \
+      puts "  batch #{i + 1}/#{batches.size} (since #{since || 'the start'}): #{items.size} results, " \
            "+#{r.posts_created} new posts, #{r.posts_updated} already held, +#{got} images"
     end
 
@@ -609,13 +609,19 @@ namespace :instagram do
   end
 
   # Every artist not fetched within min_gap, thinnest shown gallery first, each
-  # with the date to fetch from: their last fetch, or nil when their own feed
-  # has never been fetched (everything there is new to us).
+  # with the date to fetch from: their last fetch, else the newest post we hold
+  # for them, else nil (nothing held, so everything is new to us).
+  #
+  # The fallback matters because a null work_fetched_at does NOT mean the feed
+  # was never scraped — earlier paths (follow-list fetch_work, pre-stamp runs)
+  # pulled own posts without stamping. With no floor, a probe of 10 such
+  # artists re-billed 40 own posts we already held out of 120 results.
   def artists_to_refresh(min_gap)
     counts = shown_image_counts
+    newest = Post.where.not(artist_id: nil).group(:artist_id).maximum(:posted_at)
     Artist.where(work_fetched_at: nil).or(Artist.where(work_fetched_at: ...min_gap.ago))
           .pluck(:id, :handle, :work_fetched_at)
-          .map { |id, handle, at| { id: id, handle: handle, since: at&.utc&.to_date, imgs: counts[id] || 0 } }
+          .map { |id, handle, at| { id: id, handle: handle, since: (at || newest[id])&.utc&.to_date, imgs: counts[id] || 0 } }
           .sort_by { |r| [ r[:imgs], r[:id] ] }
   end
 
