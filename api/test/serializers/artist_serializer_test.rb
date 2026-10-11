@@ -39,4 +39,28 @@ class ArtistSerializerTest < ActiveSupport::TestCase
 
     assert_nil ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
   end
+
+  test "a tattoo outranks a newer design, flash sheet or drawing" do
+    tattoo = post("pv_tattoo", days_ago: 60, content_kind: "tattoo")
+    post("pv_flash", days_ago: 2, content_kind: "design")
+    post("pv_old_work", days_ago: 1, content_kind: "work")
+
+    assert_equal tattoo, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
+  end
+
+  test "a curated credit outranks a newer pre-v5 work verdict, unless v5 called it a design" do
+    curated = post("pv_cur", days_ago: 300, caption: "Tattoo by @thumbartist")
+    post("pv_cur_design", days_ago: 5, caption: "Design by @thumbartist", content_kind: "design")
+    post("pv_work", days_ago: 1, content_kind: "work")
+
+    assert_equal curated, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
+  end
+
+  test "a design outranks an unjudged post, and a painting never shows" do
+    design = post("pv_design", days_ago: 20, content_kind: "design")
+    post("pv_painting", days_ago: 1, content_kind: "other")
+    post("pv_unjudged3", days_ago: 3)
+
+    assert_equal design, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
+  end
 end

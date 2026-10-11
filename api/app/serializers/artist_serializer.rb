@@ -68,15 +68,19 @@ class ArtistSerializer
            end
   end
 
-  # The directory thumbnail (also the link-unfurl image): the newest post known
-  # to be work — a vision "work" verdict or a curated credit — else the newest
-  # post not judged junk. Plain newest-first put artists' latest selfies and
-  # booking cards on the homepage once their own feeds were backfilled.
+  # The directory thumbnail (also the link-unfurl image), the most visible
+  # image on the site, so it should be a tattoo on skin. Newest tattoo first (a
+  # v5 verdict or a curated credit), then newest design or pre-v5 "work"
+  # verdict, then the newest post nobody has judged; never a hidden one.
+  # Newest-vouched-first used to put flash sheets, sketches and once a canvas
+  # painting on the homepage, because those were simply the latest posts.
   # Relies on the controller preloading :posts to avoid N+1 queries.
   def pick_preview(posts)
     shown = posts.reject(&:not_work?)
-    vouched = shown.select { |p| p.content_kind == "work" || p.credited_to?(@artist) }
-    vouched.max_by(&:recency) || shown.max_by(&:recency)
+    tattoos, rest = shown.partition { |p| p.tattoo_by?(@artist) }
+    designs, unjudged = rest.partition { |p| Post::WORK_KINDS.include?(p.content_kind) }
+    [ tattoos, designs, unjudged ].each { |tier| return tier.max_by(&:recency) if tier.any? }
+    nil
   end
 
   # Minimal marker for the map.

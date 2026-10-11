@@ -66,6 +66,9 @@ class Post < ApplicationRecord
   # be work by the vision pass. Kept as one place so the site and the review
   # tooling cannot disagree about what is hidden.
   NOT_WORK_KINDS = %w[person promo other].freeze
+  # Verdicts that show the artist's work: "work" from classifiers v1-v4, and v5's
+  # split of it into "tattoo" (on skin) and "design" (drawn to be tattooed).
+  WORK_KINDS = %w[work tattoo design].freeze
   scope :not_work, lambda {
     text_overlay.or(where(content_kind: NOT_WORK_KINDS))
   }
@@ -98,6 +101,13 @@ class Post < ApplicationRecord
   # work without a verdict. An artist's own posts never credit themselves.
   def credited_to?(artist)
     self.class.handle_from_caption(caption) == artist.handle
+  end
+
+  # A tattoo on skin by this artist: a v5 "tattoo" verdict, or a curated credit
+  # the classifier has not overruled — @blackworkers reposts tattoos, so a
+  # credit with no verdict, or only an undivided pre-v5 "work" one, counts.
+  def tattoo_by?(artist)
+    content_kind == "tattoo" || ([ nil, "work" ].include?(content_kind) && credited_to?(artist))
   end
 
   def recency

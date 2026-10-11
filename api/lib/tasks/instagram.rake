@@ -229,8 +229,8 @@ namespace :instagram do
     puts "Review before filtering anything: rake instagram:ocr_report"
   end
 
-  desc "Classify images as work/person/promo/other via Claude vision (COSTS MONEY). " \
-       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | notext | all " \
+  desc "Classify images as tattoo/design/person/promo/other via Claude vision (COSTS MONEY). " \
+       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | previews | notext | all " \
        "(narrow with IDS=1,2, ARTIST=handle or KIND=person; RECHECK=1 re-judges older-version verdicts)"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
     abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
@@ -266,8 +266,18 @@ namespace :instagram do
               OR (active_storage_blobs.metadata::jsonb->>'height')::float >=
                  1.5 * NULLIF((active_storage_blobs.metadata::jsonb->>'width')::float, 0)
             SQL
+          when "previews"
+            # Listed artists with no tattoo to put on their directory card yet:
+            # judge their newest few unjudged posts so the card can find one,
+            # rather than showing a drawing or an unjudged post. Run after a
+            # KIND=work re-check, which settles most artists for free.
+            ids = Artist.listed.includes(:posts).flat_map do |a|
+              next [] if a.posts.any? { |p| p.tattoo_by?(a) && !p.not_work? }
+              a.posts.select { |p| p.content_kind.nil? }.sort_by(&:recency).last(8).map(&:id)
+            end
+            rel.where(id: ids)
           when "all"     then rel
-          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|notext|all)."
+          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|previews|notext|all)."
           end
     # Narrow to a known set (validating a prompt change on images already
     # inspected by eye): IDS=1,2,3, KIND=person, and/or ARTIST=handle1,handle2.

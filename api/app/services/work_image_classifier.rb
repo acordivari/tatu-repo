@@ -18,14 +18,18 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v4"
+  VERSION = "haiku45-v5"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
   # roughly a third less than the stored 640px card variant.
   MAX_EDGE = 512
 
-  KINDS = %w[work person promo other].freeze
+  # v5 split the old "work" into what is ON SKIN and what is drawn to be
+  # tattooed: both are the artist's work and both stay in galleries, but only a
+  # tattoo should front the artist on the homepage. "work" verdicts from v1-v4
+  # remain valid (see Post::WORK_KINDS) until re-checked.
+  KINDS = %w[tattoo design person promo other].freeze
 
   INSTRUCTIONS = <<~TXT.freeze
     You are sorting images from tattoo artists' Instagram accounts for a
@@ -34,11 +38,13 @@ class WorkImageClassifier
     Reply with ONLY a JSON object: {"kind": "...", "confidence": 0.0-1.0}
 
     "kind" must be exactly one of:
-      "work"   - tattoo art. EITHER a tattoo on skin (fresh, healed, or in
-                 progress) OR a piece of drawn art: a design, flash sheet,
-                 stencil, sketch, painting or digital illustration. Lettering
-                 and script tattoos count. A person may be visible, as long as
-                 the tattoo is the subject.
+      "tattoo" - a tattoo on skin: fresh, healed, or in progress (a stencil on
+                 skin, or a tattoo being made, counts). Lettering and script
+                 tattoos count. A person may be visible, as long as the tattoo
+                 is the subject.
+      "design" - drawn art made to be tattooed, not on skin: a flash sheet, a
+                 design or sketch on paper or a tablet, a stencil on paper, a
+                 drawing in progress.
       "person" - a PHOTOGRAPH whose subject is a real person rather than a
                  tattoo: a selfie, a portrait, a mirror photo, a lifestyle or
                  holiday snapshot, the artist at work, or a frame from a
@@ -48,24 +54,31 @@ class WorkImageClassifier
                  booking announcement, flash-day advert, meme, screenshot of an
                  app or chat, product advert, merchandise, or a card of text.
       "other"  - none of the above: studio interiors, equipment, pets, food,
-                 scenery, or art in a medium the artist does not tattoo with.
+                 scenery, and art in other media — a painting on canvas, a
+                 mural, a painted object (a helmet, a jacket, a skateboard), a
+                 sculpture or a print that is not a tattoo design.
 
     Judge the SUBJECT of the photo, not whether tattoos appear anywhere in it.
-    A mirror selfie of a heavily tattooed artist is "person", not "work".
+    A mirror selfie of a heavily tattooed artist is "person", not "tattoo".
 
-    SHOWING A TATTOO IS "work". When someone poses so a tattoo can be seen — a
-    sleeve held out, a back, chest, belly or leg piece turned to the camera, a
-    healed piece on a client — the tattoo is the reason for the photo, so it is
-    "work" even with their face, outfit and surroundings in frame. Call it
+    SHOWING A TATTOO IS "tattoo". When someone poses so a tattoo can be seen —
+    a sleeve held out, a back, chest, belly or leg piece turned to the camera,
+    a healed piece on a client — the tattoo is the reason for the photo, so it
+    is "tattoo" even with their face, outfit and surroundings in frame. Call it
     "person" only when the photo is about the person and any tattoo is
     incidental.
 
-    DRAWN ART IS ALWAYS "work", whatever it depicts. A drawing of a face, a
-    figure, a skull or an animal is the artist's design — it is "work", never
-    "person". A design on a plain or paper background is a flash sheet — it is
-    "work", never "promo". Only call it "promo" if the image exists to carry a
-    message (dates, prices, an announcement, a logo, merchandise for sale)
-    rather than to show a design someone could be tattooed with.
+    DRAWN ART MADE TO BE TATTOOED IS "design", whatever it depicts. A drawing
+    of a face, a figure, a skull or an animal is the artist's design — never
+    "person". A design on a plain or paper background is a flash sheet — never
+    "promo". Only call it "promo" if the image exists to carry a message
+    (dates, prices, an announcement, a logo, merchandise for sale) rather than
+    to show a design someone could be tattooed with.
+
+    PAINTINGS ARE "other". A finished painting on canvas, a wall or an object
+    is art in another medium, even when the artist made it and even in their
+    tattoo style. Flash painted on paper as a sheet of designs is still
+    "design".
 
     "confidence" is your certainty, 0.0 to 1.0. Use below 0.6 when genuinely
     unsure — a wrong "person" verdict hides real work, so prefer a low
@@ -99,7 +112,7 @@ class WorkImageClassifier
   PRICE_OUT = 5.0
 
   Verdict = Struct.new(:kind, :confidence, keyword_init: true) do
-    def work? = kind == "work"
+    def work? = Post::WORK_KINDS.include?(kind)
     def valid? = KINDS.include?(kind)
   end
 

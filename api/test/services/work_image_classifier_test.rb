@@ -16,11 +16,13 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
   end
 
   test "tolerates prose around the JSON" do
-    assert_equal "work", parse('Here you go: {"kind":"work","confidence":0.9} ').kind
+    assert_equal "tattoo", parse('Here you go: {"kind":"tattoo","confidence":0.9} ').kind
   end
 
   test "returns nil for an unknown kind rather than guessing" do
-    assert_nil parse('{"kind": "tattoo", "confidence": 0.9}')
+    assert_nil parse('{"kind": "flash", "confidence": 0.9}')
+    # v5 dropped "work" from the prompt; a reply using it is stale, not a verdict.
+    assert_nil parse('{"kind": "work", "confidence": 0.9}')
   end
 
   test "returns nil for unparseable output" do
@@ -46,5 +48,11 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
     assert_operator prompt.length, :<, WorkImageClassifier::INSTRUCTIONS.length +
                                        WorkImageClassifier::OCR_CONTEXT.length +
                                        WorkImageClassifier::OCR_MAX_CHARS
+  end
+
+  test "tattoo and design both count as work" do
+    assert parse('{"kind": "tattoo", "confidence": 0.9}').work?
+    assert parse('{"kind": "design", "confidence": 0.9}').work?
+    assert_not parse('{"kind": "other", "confidence": 0.9}').work?
   end
 end
