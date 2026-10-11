@@ -55,4 +55,12 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
     assert parse('{"kind": "design", "confidence": 0.9}').work?
     assert_not parse('{"kind": "other", "confidence": 0.9}').work?
   end
+
+  test "prompt carries the caption as medium context only when present" do
+    assert_equal WorkImageClassifier::INSTRUCTIONS, WorkImageClassifier.prompt(nil, "  ")
+
+    prompt = WorkImageClassifier.prompt(nil, "Latest painting I've been working on.\n26x31 inches")
+    assert_includes prompt, "Latest painting I've been working on. 26x31 inches"
+    assert_includes prompt, "do not make the image \"promo\""
+  end
 end

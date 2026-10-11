@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v5"
+  VERSION = "haiku45-v7"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -75,10 +75,17 @@ class WorkImageClassifier
     (dates, prices, an announcement, a logo, merchandise for sale) rather than
     to show a design someone could be tattooed with.
 
-    PAINTINGS ARE "other". A finished painting on canvas, a wall or an object
-    is art in another medium, even when the artist made it and even in their
-    tattoo style. Flash painted on paper as a sheet of designs is still
-    "design".
+    ANNOUNCEMENTS ARE "promo", even over a tattoo. A tattoo photo or a design
+    with dates, cities, "books open", "openings", "guest spot", prices or
+    contact details laid over it exists to announce something — "promo" —
+    and so does a collage of tattoos under a tour schedule. A small signature
+    or @handle watermark is not an announcement.
+
+    PAINTINGS AND PAINTED OBJECTS ARE "other". Ask what the art is ON. A
+    design is drawn for transfer to skin: on paper, a sketchbook, a tablet or a
+    flash sheet. Art on a stretched canvas, a wall, a helmet or mask, a
+    jacket, a board or any other object is a finished piece in another medium
+    — "other" — even when the artist made it in their tattoo style.
 
     "confidence" is your certainty, 0.0 to 1.0. Use below 0.6 when genuinely
     unsure — a wrong "person" verdict hides real work, so prefer a low
@@ -99,13 +106,32 @@ class WorkImageClassifier
     Use it to tell a message from a design. Dates, prices, "books open",
     "booking", "guest spot", tour cities, event names, discount codes or
     product names mean the image exists to carry a message, so it is "promo"
-    even when it is illustrated. A signature, an @handle watermark, a short
+    even when it is illustrated or shows a finished tattoo. A signature, an @handle watermark, a short
     title, or lettering that is itself the tattoo design does not make an
     image "promo".
   TXT
 
   # Long enough for a flyer's key lines; past this it is token cost, not signal.
   OCR_MAX_CHARS = 400
+
+  # Appended when the post has a caption. At 512px a canvas painting or a
+  # painted helmet looks like a drawn design, but the artist's caption usually
+  # names the medium ("Latest painting… 26x31 inches raw linen"). The caption is
+  # deliberately NOT allowed to decide "promo": tattoo photos are routinely
+  # captioned "books open" or "DM to book", and that must not hide them.
+  CAPTION_CONTEXT = <<~TXT.freeze
+    THE ARTIST'S CAPTION for this post (context only; it may describe several
+    images in a carousel):
+    """
+    %<text>s
+    """
+    Use it only to tell what medium the art is in. Words like "painting",
+    "canvas", "acrylic", "oil", "mural", "helmet", "jacket" or "print" point to
+    "other"; "flash", "design" or "available" point to "design". Booking or
+    pricing words in a CAPTION do not make the image "promo" — decide "promo"
+    only from what is in the image itself.
+  TXT
+  CAPTION_MAX_CHARS = 300
 
   # Haiku 4.5 pricing ($/million tokens) for cost reporting.
   PRICE_IN = 1.0
@@ -143,7 +169,7 @@ class WorkImageClassifier
   # Returns a Verdict, or nil if the call failed or the model returned
   # something unusable — callers must treat nil as "unknown" and leave the post
   # alone rather than defaulting it to a kind, which would quietly mislabel work.
-  def classify(jpeg_bytes, ocr_text: nil)
+  def classify(jpeg_bytes, ocr_text: nil, caption: nil)
     message = @client.messages.create(
       model: @model,
       max_tokens: 128,
@@ -153,7 +179,7 @@ class WorkImageClassifier
           { type: "image",
             source: { type: "base64", media_type: "image/jpeg",
                       data: Base64.strict_encode64(jpeg_bytes) } },
-          { type: "text", text: self.class.prompt(ocr_text) }
+          { type: "text", text: self.class.prompt(ocr_text, caption) }
         ]
       } ]
     )
@@ -169,11 +195,13 @@ class WorkImageClassifier
 
   # The instructions, plus the OCR block when there is text worth reading.
   # Whitespace is collapsed because OCR emits one line per detected box.
-  def self.prompt(ocr_text)
+  def self.prompt(ocr_text, caption = nil)
     text = ocr_text.to_s.squish.truncate(OCR_MAX_CHARS)
-    return INSTRUCTIONS if text.blank?
-
-    INSTRUCTIONS + "\n" + format(OCR_CONTEXT, text: text)
+    cap = caption.to_s.squish.truncate(CAPTION_MAX_CHARS)
+    out = INSTRUCTIONS
+    out += "\n" + format(OCR_CONTEXT, text: text) if text.present?
+    out += "\n" + format(CAPTION_CONTEXT, text: cap) if cap.present?
+    out
   end
 
   # Downscale before sending: image tokens scale with pixel count, so this is

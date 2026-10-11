@@ -241,8 +241,10 @@ namespace :instagram do
     # bump would have re-billed ~6,900 v3 verdicts ($8.61) to fix ~700.
     # RECHECK=1, or the nonwork scope (which exists to re-check), opts in.
     recheck = ENV["RECHECK"].present? || args[:scope] == "nonwork"
+    # Posts by unlisted artists (profile gone, or delisted) are never shown, so
+    # judging them is money spent on nothing.
     rel = (recheck ? Post.classifier_stale(WorkImageClassifier::VERSION) : Post.unclassified)
-          .joins(:image_attachment)
+          .by_listed_artist.joins(:image_attachment)
     rel = case args[:scope].presence || "ambiguous"
           when "ambiguous"
             # The band OCR provably cannot resolve: tall text is a large-type
@@ -291,11 +293,11 @@ namespace :instagram do
     ids = rel.pluck(:id)
     abort "Nothing to classify for that scope." if ids.empty?
 
-    # Measured on v3's 6,526-image risky pass: the OCR block lengthens the
-    # prompt, so text-bearing images run above v2's ~$0.0011.
-    est = ids.size * 0.0013
+    # Measured on v7's 192-image validation set: the OCR and caption blocks
+    # lengthen the prompt, so images run well above v2's ~$0.0011.
+    est = ids.size * 0.0017
     puts "Classifying #{ids.size} images with #{WorkImageClassifier::MODEL} " \
-         "(~$#{format('%.2f', est)} — measured at ~$0.0013/image)…"
+         "(~$#{format('%.2f', est)} — measured at ~$0.0017/image)…"
 
     classifier = WorkImageClassifier.new
     threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)
@@ -311,7 +313,7 @@ namespace :instagram do
           ActiveRecord::Base.connection_pool.with_connection do
             post = Post.with_image_blobs.find(id)
             bytes = WorkImageClassifier.downscale(card_bytes(post))
-            verdict = classifier.classify(bytes, ocr_text: post.ocr_text)
+            verdict = classifier.classify(bytes, ocr_text: post.ocr_text, caption: post.caption)
             if verdict.nil?
               # No verdict means unknown. Deliberately NOT stamped: leaving it
               # unclassified retries next run, where defaulting it to a kind
