@@ -47,4 +47,14 @@ class ApifyClientTest < ActiveSupport::TestCase
     assert_raises(ApifyClient::RequestError) { @client.posts_for(%w[artist_a], per_user: 12) }
     assert_requested start, times: 1
   end
+
+  test "missing_profiles reads only not_found errors, not private or empty ones" do
+    items = [
+      { "error" => "not_found", "inputUrl" => "https://www.instagram.com/Gone.Artist/" },
+      { "error" => "no_items", "inputUrl" => "https://www.instagram.com/private_one/" },
+      { "error" => "Restricted profile", "url" => "https://www.instagram.com/adult_only/" },
+      { "shortCode" => "abc", "ownerUsername" => "live_one" }
+    ]
+    assert_equal %w[gone.artist], ApifyClient.missing_profiles(items)
+  end
 end

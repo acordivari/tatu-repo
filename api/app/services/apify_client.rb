@@ -62,6 +62,16 @@ class ApifyClient
     run(input, timeout: timeout)
   end
 
+  # Handles whose profile Instagram reports as gone (renamed or deleted). The
+  # actor emits one billed error item per such profile, carrying the URL it was
+  # asked for; private or merely empty profiles come back as other error kinds
+  # and do NOT mean the account is gone.
+  def self.missing_profiles(items)
+    Array(items).select { |i| i["error"] == "not_found" }
+                .filter_map { |i| (i["inputUrl"] || i["url"]).to_s[%r{instagram\.com/([^/?#]+)}, 1] }
+                .filter_map { |h| Artist.normalize_handle(h) }.uniq
+  end
+
   # Scrape MANY artist profiles in a single run (the efficient path for bulk
   # enrichment). Returns normalized profile hashes keyed by handle.
   def profiles(handles, timeout: DEFAULT_TIMEOUT)

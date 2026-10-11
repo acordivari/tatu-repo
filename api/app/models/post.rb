@@ -73,6 +73,8 @@ class Post < ApplicationRecord
   # them would empty most galleries until the vision pass reaches them, so it
   # is classifier COVERAGE, not this scope, that keeps junk off the site.
   scope :shown, -> { where.not(id: not_work.select(:id)) }
+  # Posts whose artist is on the site (unattributed posts have no artist to hide).
+  scope :by_listed_artist, -> { where(artist_id: nil).or(where(artist_id: Artist.listed.select(:id))) }
 
   # Same judgement as the scope, for callers holding raw OCR output rather than
   # a persisted row. Kept beside the scope so the two cannot drift.

@@ -14,6 +14,12 @@ class Artist < ApplicationRecord
   # expression so they always agree (see ArtistsController#regions / in_region).
   REGION_KEY = Arel.sql("COALESCE(NULLIF(region_canonical, ''), region)")
 
+  # On the public site. Two independent reasons keep an artist off it: their
+  # Instagram profile no longer exists (pipeline-managed, see refresh_work), or
+  # they were delisted by hand (permanent until someone relists them).
+  scope :listed,   -> { where(profile_missing_at: nil, delisted_at: nil) }
+  scope :unlisted, -> { where.not(profile_missing_at: nil).or(where.not(delisted_at: nil)) }
+
   scope :located,    -> { where.not(latitude: nil, longitude: nil) }
   scope :unenriched, -> { where(enriched_at: nil) }
   # Has a bio whose location hasn't been extracted yet — either never, or not
@@ -61,5 +67,9 @@ class Artist < ApplicationRecord
   # Strip leading @, whitespace, and downcase — handles are case-insensitive.
   def self.normalize_handle(raw)
     raw.to_s.strip.delete_prefix("@").downcase.presence
+  end
+
+  def listed?
+    profile_missing_at.nil? && delisted_at.nil?
   end
 end

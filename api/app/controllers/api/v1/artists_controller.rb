@@ -5,7 +5,7 @@ module Api
 
       # GET /api/v1/artists?q=&country=&region=&located=&sort=
       def index
-        artists = Artist.all
+        artists = Artist.listed
         artists = artists.search(params[:q])               if params[:q].present?
         artists = artists.in_country(params[:country])     if params[:country].present?
         artists = artists.in_region(params[:region])       if params[:region].present?
@@ -25,7 +25,7 @@ module Api
 
       # GET /api/v1/artists/map?sw_lat=&sw_lng=&ne_lat=&ne_lng=
       def map
-        artists = Artist.located
+        artists = Artist.listed.located
         if %i[sw_lat sw_lng ne_lat ne_lng].all? { |k| params[k].present? }
           artists = artists.within_bounds(
             params[:sw_lat].to_f, params[:sw_lng].to_f,
@@ -42,11 +42,11 @@ module Api
       # the canonical region label so variants (CA/California) collapse to one row.
       def regions
         facets = {
-          countries: Artist.where.not(country: [nil, ""])
+          countries: Artist.listed.where.not(country: [nil, ""])
                            .group(:country).order(Arel.sql("COUNT(*) DESC")).count
         }
         if params[:country].present?
-          facets[:regions] = Artist.in_country(params[:country])
+          facets[:regions] = Artist.listed.in_country(params[:country])
                                    .where.not(region: [nil, ""])
                                    .group(Artist::REGION_KEY)
                                    .order(Arel.sql("COUNT(*) DESC")).count
@@ -57,7 +57,7 @@ module Api
       private
 
       def find_artist
-        scope = Artist.includes(memberships: :shop)
+        scope = Artist.listed.includes(memberships: :shop)
         if params[:id].to_s.match?(/\A\d+\z/)
           scope.find(params[:id])
         else

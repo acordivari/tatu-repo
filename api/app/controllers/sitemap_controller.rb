@@ -11,7 +11,7 @@ class SitemapController < ActionController::API
 
   def sitemap_xml
     entries = [ url_entry("#{site_base}/"), url_entry("#{site_base}/shops"), url_entry("#{site_base}/map") ]
-    Artist.select(:id, :handle, :updated_at).find_each do |a|
+    Artist.listed.select(:id, :handle, :updated_at).find_each do |a|
       entries << url_entry("#{site_base}/artists/#{a.handle}", lastmod: a.updated_at)
     end
     Shop.located.select(:id, :handle, :updated_at).find_each do |s|

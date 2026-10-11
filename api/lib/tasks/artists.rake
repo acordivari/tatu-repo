@@ -65,4 +65,23 @@ namespace :artists do
     puts "\nNamed a studio? Run `rake instagram:resolve_shops` to upgrade it to a " \
          "verified Google location (conf 0.97)."
   end
+
+  # Taking an artist off the site keeps the row (and its posts) as a tombstone:
+  # deleting it would let the next @blackworkers scrape or follow-list import
+  # re-create the artist from a caption credit, quietly re-publishing them.
+  desc "Take an artist off the public site by hand. Usage: rake 'artists:delist[handle,reason]'"
+  task :delist, %i[handle reason] => :environment do |_t, args|
+    reason = args[:reason].presence or abort "Give a reason, e.g. rake 'artists:delist[handle,deceased]'"
+    artist = Artist.find_by(handle: Artist.normalize_handle(args[:handle])) or abort "No artist @#{args[:handle]}."
+    artist.update_columns(delisted_at: Time.current, delisted_reason: reason, updated_at: Time.current)
+    puts "Delisted @#{artist.handle} (#{reason}). Hidden from the directory, search, map, " \
+         "shop rosters, posts feed and sitemap; its page now 404s. Undo: rake 'artists:relist[#{artist.handle}]'"
+  end
+
+  desc "Put a delisted artist back on the public site. Usage: rake 'artists:relist[handle]'"
+  task :relist, [ :handle ] => :environment do |_t, args|
+    artist = Artist.find_by(handle: Artist.normalize_handle(args[:handle])) or abort "No artist @#{args[:handle]}."
+    artist.update_columns(delisted_at: nil, delisted_reason: nil, updated_at: Time.current)
+    puts "Relisted @#{artist.handle}#{artist.profile_missing_at ? ' (still hidden: Instagram profile marked missing)' : ''}."
+  end
 end

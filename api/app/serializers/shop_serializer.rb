@@ -54,6 +54,7 @@ class ShopSerializer
   # controller preloading memberships -> artist -> posts to avoid N+1s.
   def roster
     @shop.memberships
+         .select { |m| m.artist.listed? }
          .sort_by { |m| [m.current ? 0 : 1, -(m.confidence || 0)] }
          .map { |m| ArtistSerializer.new(m.artist).as_card.merge(role: m.role, current: m.current) }
   end

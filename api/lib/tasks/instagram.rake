@@ -129,8 +129,11 @@ namespace :instagram do
       Artist.where(id: ids).update_all(work_fetched_at: Time.current, updated_at: Time.current)
       r = InstagramIngestor.new(items, attach_images: false, attribute_by: :owner,
                                 create_missing: false).call
+      gone, back = record_profile_presence(items, batch)
       got = attach_images_for(ids)
       totals[:results] += items.size
+      totals[:gone] += gone
+      totals[:back] += back
       totals[:new] += r.posts_created
       totals[:rebilled] += r.posts_updated
       totals[:images] += got
@@ -141,6 +144,7 @@ namespace :instagram do
     puts "\nDone. #{totals[:results]} results billed (~$#{format('%.2f', totals[:results] / 1000.0 * APIFY_USD_PER_1K)}): " \
          "#{totals[:new]} new posts, #{totals[:images]} images stored, " \
          "#{totals[:rebilled]} re-billed posts we already held (pinned or same-day)."
+    puts "Profiles: #{totals[:gone]} newly missing (hidden from the site), #{totals[:back]} found again (relisted)."
     puts "Next: rake instagram:ocr_images, then rake 'instagram:classify_images[,risky]', " \
          "then THREADS=8 rake storage:preprocess_variants"
   rescue ApifyClient::NotConfigured
@@ -629,10 +633,26 @@ namespace :instagram do
   def artists_to_refresh(min_gap)
     counts = shown_image_counts
     newest = Post.where.not(artist_id: nil).group(:artist_id).maximum(:posted_at)
-    Artist.where(work_fetched_at: nil).or(Artist.where(work_fetched_at: ...min_gap.ago))
+    # Missing profiles stay in: a refresh is how a renamed-back or restored
+    # account gets found again, at one billed error item each. Delisted artists
+    # are out — nobody should pay to refresh a profile taken down by hand.
+    Artist.where(delisted_at: nil)
+          .merge(Artist.where(work_fetched_at: nil).or(Artist.where(work_fetched_at: ...min_gap.ago)))
           .pluck(:id, :handle, :work_fetched_at)
           .map { |id, handle, at| { id: id, handle: handle, since: (at || newest[id])&.utc&.to_date, imgs: counts[id] || 0 } }
           .sort_by { |r| [ r[:imgs], r[:id] ] }
+  end
+
+  # Hide artists whose profile Instagram says is gone; unhide any that came back
+  # with posts. Only "not_found" counts as gone — private or empty profiles
+  # return other errors and are left listed. Returns [newly_missing, found_again].
+  def record_profile_presence(items, batch)
+    by_handle = batch.to_h { |b| [ b[:handle], b[:id] ] }
+    gone = ApifyClient.missing_profiles(items).filter_map { |h| by_handle[h] }
+    seen = items.filter_map { |i| by_handle[Artist.normalize_handle(i["ownerUsername"])] }.uniq
+    newly = Artist.where(id: gone, profile_missing_at: nil).update_all(profile_missing_at: Time.current)
+    back = Artist.where(id: seen).where.not(profile_missing_at: nil).update_all(profile_missing_at: nil)
+    [ newly, back ]
   end
 
   # Download and store images inline (throttled) so they land in the configured
@@ -659,7 +679,7 @@ namespace :instagram do
     stamped = Artist.where.not(work_fetched_at: nil)
     stamped = stamped.where(work_fetched_at: retry_after.ago..) if retry_after
     attempted = stamped.pluck(:id).to_set
-    Artist.pluck(:id, :handle)
+    Artist.listed.pluck(:id, :handle)
           .map { |id, handle| { id: id, handle: handle, imgs: counts[id] || 0 } }
           .select { |r| r[:imgs] < target && !attempted.include?(r[:id]) }
           .sort_by { |r| r[:imgs] }
