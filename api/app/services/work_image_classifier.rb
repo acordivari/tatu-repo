@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v7"
+  VERSION = "haiku45-v8"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -29,7 +29,14 @@ class WorkImageClassifier
   # tattooed: both are the artist's work and both stay in galleries, but only a
   # tattoo should front the artist on the homepage. "work" verdicts from v1-v4
   # remain valid (see Post::WORK_KINDS) until re-checked.
-  KINDS = %w[tattoo design person promo other].freeze
+  #
+  # v8 split "process" out of both: the MAKING of a tattoo (a machine at the
+  # skin, a stencil on skin or paper, a wide shot of the artist tattooing). The
+  # site is meant to read as a portfolio, and v7 filed these under "tattoo" and
+  # "design" — half of one reel-heavy artist's gallery was stencils and gloved
+  # hands. "process" is hidden (see Post::NOT_WORK_KINDS). "tattoo" and "design"
+  # verdicts from v5-v7 may still be process shots until re-checked.
+  KINDS = %w[tattoo process design person promo other].freeze
 
   INSTRUCTIONS = <<~TXT.freeze
     You are sorting images from tattoo artists' Instagram accounts for a
@@ -38,18 +45,26 @@ class WorkImageClassifier
     Reply with ONLY a JSON object: {"kind": "...", "confidence": 0.0-1.0}
 
     "kind" must be exactly one of:
-      "tattoo" - a tattoo on skin: fresh, healed, or in progress (a stencil on
-                 skin, or a tattoo being made, counts). Lettering and script
-                 tattoos count. A person may be visible, as long as the tattoo
-                 is the subject.
-      "design" - drawn art made to be tattooed, not on skin: a flash sheet, a
-                 design or sketch on paper or a tablet, a stencil on paper, a
-                 drawing in progress.
+      "tattoo" - a tattoo on skin, fresh or healed, PRESENTED to be looked at:
+                 the piece is the subject and nobody is working on it.
+                 Lettering and script tattoos count. A person may be visible,
+                 as long as the tattoo is the subject.
+      "process" - the MAKING of a tattoo rather than the result: a tattoo being
+                 made (a machine or needle at the skin, the artist bent over a
+                 client, wiping mid-session), a stencil on skin (purple or blue
+                 transfer lines with little or no ink yet), a stencil or
+                 transfer paper being prepared, held or applied, a drawing
+                 visibly still being worked out (rough pencil on tracing or
+                 stencil paper), or a wide shot of the artist tattooing someone.
+      "design" - finished drawn art made to be tattooed, not on skin: a flash
+                 sheet, a design or sketch on paper or a tablet, or a digital
+                 mock-up (line art pasted over a photo of a body to preview
+                 where it would go).
       "person" - a PHOTOGRAPH whose subject is a real person rather than a
                  tattoo: a selfie, a portrait, a mirror photo, a lifestyle or
-                 holiday snapshot, the artist at work, or a frame from a
-                 talking-to-camera video. Still "person" when the people shown
-                 happen to have tattoos, and when the image carries caption text.
+                 holiday snapshot, or a frame from a talking-to-camera video.
+                 Still "person" when the people shown happen to have tattoos,
+                 and when the image carries caption text.
       "promo"  - no real subject, just a message: a flyer, poster, price list,
                  booking announcement, flash-day advert, meme, screenshot of an
                  app or chat, product advert, merchandise, or a card of text.
@@ -68,12 +83,30 @@ class WorkImageClassifier
     "person" only when the photo is about the person and any tattoo is
     incidental.
 
+    PROCESS VERSUS TATTOO. Ask whether the photo shows work BEING DONE or work
+    being SHOWN. A tattoo machine, needle or ink cap in use, hands mid-wipe, an
+    artist leaning over a client, or skin carrying mostly stencil lines means
+    "process" — even when finished tattoos are visible elsewhere in the frame.
+    A gloved hand that only HOLDS or steadies a limb so a finished tattoo can
+    be photographed is still "tattoo", and so is a fresh tattoo that is red,
+    shiny, wrapped in film or resting on a paper towel. A posed photo of an
+    unfinished multi-session piece is "tattoo" when what is on the skin is INK
+    (outline done, shading to come), and "process" when it is mostly purple or
+    blue stencil waiting to be tattooed.
+
     DRAWN ART MADE TO BE TATTOOED IS "design", whatever it depicts. A drawing
     of a face, a figure, a skull or an animal is the artist's design — never
     "person". A design on a plain or paper background is a flash sheet — never
     "promo". Only call it "promo" if the image exists to carry a message
     (dates, prices, an announcement, a logo, merchandise for sale) rather than
     to show a design someone could be tattooed with.
+
+    INK IN SKIN IS "tattoo", NEVER "design". A tattoo made from the artist's
+    flash is a tattoo: it sits IN the skin, following the body's curves, with
+    skin texture, hair, shine or redness showing through — however flat, bold
+    or colourful the style, and whatever the caption says about flash. A
+    mock-up is unmistakably pasted ON: crisp artwork that ignores the skin's
+    texture, lighting and curvature, often spilling past the edge of the body.
 
     ANNOUNCEMENTS ARE "promo", even over a tattoo. A tattoo photo or a design
     with dates, cities, "books open", "openings", "guest spot", prices or
@@ -88,8 +121,8 @@ class WorkImageClassifier
     — "other" — even when the artist made it in their tattoo style.
 
     "confidence" is your certainty, 0.0 to 1.0. Use below 0.6 when genuinely
-    unsure — a wrong "person" verdict hides real work, so prefer a low
-    confidence over a confident guess.
+    unsure — a wrong "person" or "process" verdict hides real work, so prefer
+    a low confidence over a confident guess.
   TXT
 
   # Appended when OCR found text in the image. The model sees a 512px copy, at

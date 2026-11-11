@@ -229,7 +229,7 @@ namespace :instagram do
     puts "Review before filtering anything: rake instagram:ocr_report"
   end
 
-  desc "Classify images as tattoo/design/person/promo/other via Claude vision (COSTS MONEY). " \
+  desc "Classify images as tattoo/process/design/person/promo/other via Claude vision (COSTS MONEY). " \
        "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | previews | notext | all " \
        "(narrow with IDS=1,2, ARTIST=handle or KIND=person; RECHECK=1 re-judges older-version verdicts)"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
@@ -255,7 +255,7 @@ namespace :instagram do
             # Re-check only verdicts that would HIDE an image. When the prompt
             # improves, this is where a wrong call is expensive: a hidden work
             # photo is a real loss, while a junk image left visible is not.
-            rel.where(content_kind: %w[person promo other])
+            rel.where(content_kind: Post::NOT_WORK_KINDS)
           when "risky"
             # Where non-work concentrates. Reel covers (tall frames, or Apify's
             # "clips") carry the talking-head and lifestyle shots; any burned-in
@@ -293,11 +293,13 @@ namespace :instagram do
     ids = rel.pluck(:id)
     abort "Nothing to classify for that scope." if ids.empty?
 
-    # Measured on v7's 192-image validation set: the OCR and caption blocks
-    # lengthen the prompt, so images run well above v2's ~$0.0011.
-    est = ids.size * 0.0017
+    # v7 measured ~$0.0017 on its 192-image validation set (the OCR and caption
+    # blocks lengthen the prompt well past v2's ~$0.0011). v8's longer prompt
+    # measured $0.0021 on 92 images sent without OCR text, where v7 ran
+    # $0.0016 — so ~$0.0022 once OCR blocks are included.
+    est = ids.size * 0.0022
     puts "Classifying #{ids.size} images with #{WorkImageClassifier::MODEL} " \
-         "(~$#{format('%.2f', est)} — measured at ~$0.0017/image)…"
+         "(~$#{format('%.2f', est)} — estimated at ~$0.0022/image)…"
 
     classifier = WorkImageClassifier.new
     threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)

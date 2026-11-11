@@ -60,6 +60,13 @@ class ArtistSerializerTest < ActiveSupport::TestCase
     assert_equal unjudged, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
   end
 
+  test "a process shot never fronts the artist, even when it is the newest post" do
+    tattoo = post("pv_finished", days_ago: 40, content_kind: "tattoo")
+    post("pv_stencil", days_ago: 1, content_kind: "process")
+
+    assert_equal tattoo, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
+  end
+
   test "has no preview when every post is hidden" do
     post("pv_promo", days_ago: 2, content_kind: "promo")
 

@@ -151,6 +151,30 @@ class PostTest < ActiveSupport::TestCase
     assert_includes shown, unjudged
   end
 
+  test "a process shot is hidden, while the tattoo and the design stay" do
+    process = Post.create!(ig_shortcode: "pr_process", classified_at: Time.current, content_kind: "process")
+    tattoo  = Post.create!(ig_shortcode: "pr_tattoo", classified_at: Time.current, content_kind: "tattoo")
+    design  = Post.create!(ig_shortcode: "pr_design", classified_at: Time.current, content_kind: "design")
+
+    assert_includes Post.not_work, process
+    assert_predicate process, :not_work?
+    assert_not_includes Post.shown, process
+    assert_includes Post.shown, tattoo
+    assert_includes Post.shown, design
+  end
+
+  test "portfolio_order puts designs after everything else, newest first within each" do
+    design_new = Post.create!(ig_shortcode: "po_design_new", content_kind: "design", posted_at: 1.day.ago)
+    tattoo_old = Post.create!(ig_shortcode: "po_tattoo_old", content_kind: "tattoo", posted_at: 90.days.ago)
+    unjudged   = Post.create!(ig_shortcode: "po_unjudged", posted_at: 5.days.ago)
+    legacy     = Post.create!(ig_shortcode: "po_legacy", content_kind: "work", posted_at: 30.days.ago)
+    design_old = Post.create!(ig_shortcode: "po_design_old", content_kind: "design", posted_at: 60.days.ago)
+
+    ordered = Post.where(id: [ design_new, tattoo_old, unjudged, legacy, design_old ]).portfolio_order
+
+    assert_equal [ unjudged, legacy, tattoo_old, design_new, design_old ], ordered.to_a
+  end
+
   test "not_work? agrees with the not_work scope row by row" do
     rows = [
       Post.create!(ig_shortcode: "nwq_overlay", ocr_at: Time.current,
@@ -162,6 +186,8 @@ class PostTest < ActiveSupport::TestCase
                    ocr_lines: 4, ocr_mean_height: 0.023, ocr_elongation: 12.2),
       Post.create!(ig_shortcode: "nwq_person", content_kind: "person"),
       Post.create!(ig_shortcode: "nwq_other", content_kind: "other"),
+      Post.create!(ig_shortcode: "nwq_process", content_kind: "process"),
+      Post.create!(ig_shortcode: "nwq_tattoo", content_kind: "tattoo"),
       Post.create!(ig_shortcode: "nwq_work", content_kind: "work"),
       Post.create!(ig_shortcode: "nwq_bare")
     ]

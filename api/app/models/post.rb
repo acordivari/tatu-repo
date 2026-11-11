@@ -18,6 +18,14 @@ class Post < ApplicationRecord
   validates :ig_shortcode, presence: true, uniqueness: true
 
   scope :recent,     -> { order(posted_at: :desc, id: :desc) }
+  # Gallery order for an artist's page, which should read as a portfolio:
+  # tattoos on skin first, drawn designs (flash, sketches) after them, newest
+  # first within each. Only a "design" verdict moves a post back — unjudged
+  # posts and pre-v5 "work" verdicts are nearly all tattoos, so they keep their
+  # place by date. Newest-first alone let a drawing lead the page.
+  scope :portfolio_order, lambda {
+    order(Arel.sql("CASE WHEN posts.content_kind = 'design' THEN 1 ELSE 0 END")).recent
+  }
   scope :attributed, -> { where.not(artist_id: nil) }
   # Posts that have a source image URL but no stored copy yet.
   scope :needs_image, -> { where.not(image_url: nil).where.missing(:image_attachment) }
@@ -64,8 +72,10 @@ class Post < ApplicationRecord
 
   # Images the directory should not show: an overlay by OCR, or judged not to
   # be work by the vision pass. Kept as one place so the site and the review
-  # tooling cannot disagree about what is hidden.
-  NOT_WORK_KINDS = %w[person promo other].freeze
+  # tooling cannot disagree about what is hidden. "process" (v8: a tattoo being
+  # made, a stencil, the artist at work) is about tattooing but is not a
+  # portfolio piece, so it is hidden with the rest.
+  NOT_WORK_KINDS = %w[person promo other process].freeze
   # Verdicts that show the artist's work: "work" from classifiers v1-v4, and v5's
   # split of it into "tattoo" (on skin) and "design" (drawn to be tattooed).
   WORK_KINDS = %w[work tattoo design].freeze

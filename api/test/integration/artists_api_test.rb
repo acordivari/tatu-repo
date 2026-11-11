@@ -72,4 +72,23 @@ class ArtistsApiTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal %w[gal_unjudged gal_work], JSON.parse(response.body).map { |p| p["shortcode"] }
   end
+
+  # The artist page should read as a portfolio: no shots of the tattoo being
+  # made, and finished tattoos ahead of drawings even when a drawing is newer.
+  test "artist gallery hides process shots and lists tattoos before designs" do
+    artist = Artist.find_by!(handle: "us_ca_1")
+    Post.create!(ig_shortcode: "pf_tattoo_old", artist: artist, content_kind: "tattoo", posted_at: 30.days.ago)
+    Post.create!(ig_shortcode: "pf_tattoo_new", artist: artist, content_kind: "tattoo", posted_at: 4.days.ago)
+    Post.create!(ig_shortcode: "pf_stencil", artist: artist, content_kind: "process", posted_at: 3.days.ago)
+    Post.create!(ig_shortcode: "pf_flash", artist: artist, content_kind: "design", posted_at: 1.day.ago)
+
+    get "/api/v1/artists/us_ca_1"
+    assert_response :success
+    assert_equal %w[pf_tattoo_new pf_tattoo_old pf_flash], JSON.parse(response.body)["posts"].map { |p| p["shortcode"] }
+
+    # The cross-artist feed stays newest-first; it only drops the process shot.
+    get "/api/v1/posts", params: { artist: "us_ca_1" }
+    assert_response :success
+    assert_equal %w[pf_flash pf_tattoo_new pf_tattoo_old], JSON.parse(response.body).map { |p| p["shortcode"] }
+  end
 end

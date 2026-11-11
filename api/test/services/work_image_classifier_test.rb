@@ -56,6 +56,23 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
     assert_not parse('{"kind": "other", "confidence": 0.9}').work?
   end
 
+  # v8: the making of a tattoo is a verdict of its own, and not portfolio work.
+  test "process is a valid verdict that does not count as work" do
+    v = parse('{"kind": "process", "confidence": 0.9}')
+
+    assert_equal "process", v.kind
+    assert_not v.work?
+    assert_includes Post::NOT_WORK_KINDS, "process"
+  end
+
+  test "every kind the prompt offers is either shown or hidden, never neither" do
+    WorkImageClassifier::KINDS.each do |kind|
+      assert_includes WorkImageClassifier::INSTRUCTIONS, %("#{kind}")
+      assert Post::WORK_KINDS.include?(kind) ^ Post::NOT_WORK_KINDS.include?(kind),
+             "#{kind} must be in exactly one of WORK_KINDS and NOT_WORK_KINDS"
+    end
+  end
+
   test "prompt carries the caption as medium context only when present" do
     assert_equal WorkImageClassifier::INSTRUCTIONS, WorkImageClassifier.prompt(nil, "  ")
 
