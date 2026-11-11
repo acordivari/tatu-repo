@@ -74,9 +74,13 @@ class ArtistSerializer
   # verdict, then the newest post nobody has judged; never a hidden one.
   # Newest-vouched-first used to put flash sheets, sketches and once a canvas
   # painting on the homepage, because those were simply the latest posts.
-  # Relies on the controller preloading :posts to avoid N+1 queries.
+  # Only posts with a stored image qualify: one whose download never completed
+  # has no URL to show (see ImageUrls), so picking it would leave the card
+  # blank while the artist has other images.
+  # Relies on the controller preloading posts with Post::IMAGE_EAGER_LOAD so
+  # neither image.attached? nor the URL issues a query per post.
   def pick_preview(posts)
-    shown = posts.reject(&:not_work?)
+    shown = posts.select { |p| p.image.attached? }.reject(&:not_work?)
     tattoos, rest = shown.partition { |p| p.tattoo_by?(@artist) }
     designs, unjudged = rest.partition { |p| Post::WORK_KINDS.include?(p.content_kind) }
     [ tattoos, designs, unjudged ].each { |tier| return tier.max_by(&:recency) if tier.any? }

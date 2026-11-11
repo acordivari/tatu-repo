@@ -37,6 +37,9 @@ export default function ArtistPage() {
     );
   const shops = data.shops ?? [];
   const primaryShop = shops[0];
+  // A post whose image was never downloaded comes back with image_url null
+  // (the API doesn't hotlink Instagram); skip it rather than show a blank tile.
+  const posts = data.posts.filter((p) => p.image_url);
 
   return (
     <div className="page">
@@ -78,11 +81,11 @@ export default function ArtistPage() {
         shop={primaryShop ? { handle: primaryShop.handle, name: primaryShop.name } : null}
       />
 
-      {data.posts.length === 0 ? (
+      {posts.length === 0 ? (
         <div className="notice">No featured pieces yet.</div>
       ) : (
         <div className="grid">
-          {data.posts.map((p) => (
+          {posts.map((p) => (
             <Tile key={p.id} post={p} />
           ))}
         </div>

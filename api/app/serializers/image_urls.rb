@@ -12,10 +12,12 @@ module ImageUrls
   module_function
 
   # Grid-tile URL for a post image: the :card variant when it can be produced,
-  # the stored original otherwise, the (expiring) Instagram source URL only if
-  # the download never completed.
+  # the stored original otherwise, nil if the download never completed. Never
+  # the post's Instagram source URL: those CDN links expire within days, the
+  # site doesn't hotlink Instagram, and the SPA's Content-Security-Policy
+  # blocks them anyway (img-src allows only our own storage).
   def post_image_url(post)
-    return post.image_url unless post.image.attached?
+    return unless post.image.attached?
 
     blob_url(post.image.variant(:card).processed.image.blob)
   rescue StandardError => e

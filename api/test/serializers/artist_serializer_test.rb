@@ -8,8 +8,34 @@ class ArtistSerializerTest < ActiveSupport::TestCase
     @artist = Artist.create!(handle: "thumbartist")
   end
 
-  def post(code, days_ago:, **attrs)
-    Post.create!(ig_shortcode: code, artist: @artist, posted_at: days_ago.days.ago, **attrs)
+  # Posts get a stored image unless stored: false, matching a completed
+  # download; stored: false is a post whose download never finished.
+  def post(code, days_ago:, stored: true, **attrs)
+    Post.create!(ig_shortcode: code, artist: @artist, posted_at: days_ago.days.ago, **attrs).tap do |p|
+      p.image.attach(io: StringIO.new("img"), filename: "#{code}.jpg", content_type: "image/jpeg") if stored
+    end
+  end
+
+  test "skips a post whose image was never stored, even a tattoo" do
+    post("pv_unstored_tattoo", days_ago: 1, content_kind: "tattoo", stored: false,
+         image_url: "https://instagram.example.fbcdn.net/expired.jpg")
+    design = post("pv_stored_design", days_ago: 30, content_kind: "design")
+
+    assert_equal design, ArtistSerializer.new(@artist).pick_preview(@artist.posts.to_a)
+  end
+
+  test "has no preview when no post has a stored image" do
+    post("pv_unstored_only", days_ago: 1, content_kind: "tattoo", stored: false,
+         image_url: "https://instagram.example.fbcdn.net/expired.jpg")
+
+    assert_nil ArtistSerializer.new(@artist).as_card[:preview_image_url]
+  end
+
+  test "a post whose image was never stored serializes with no image URL, not the Instagram one" do
+    unstored = post("pv_unstored_card", days_ago: 1, stored: false,
+                    image_url: "https://instagram.example.fbcdn.net/expired.jpg")
+
+    assert_nil PostSerializer.new(unstored).as_card[:image_url]
   end
 
   test "prefers an older curated credit over a newer unjudged post" do
