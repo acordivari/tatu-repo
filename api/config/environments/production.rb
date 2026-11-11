@@ -29,6 +29,13 @@ Rails.application.configure do
   # (Set R2_PUBLIC_BASE to a public bucket host to skip signing entirely.)
   config.active_storage.service_urls_expire_in = 1.week
 
+  # Don't mount Active Storage's routes. Production never serves through them
+  # (ImageUrls hands out R2 URLs directly), and left on they expose an
+  # unauthenticated POST /rails/active_storage/direct_uploads that signs R2
+  # upload URLs for anyone, plus redirect routes that would then serve those
+  # files from our domain. Development keeps them: the Disk service needs them.
+  config.active_storage.draw_routes = false
+
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true
 
