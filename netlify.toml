@@ -1,7 +1,7 @@
 # Netlify build for the React/Vite SPA in web/.
 # Set VITE_API_URL in the Netlify dashboard (Site settings → Environment) to
 # your Render API base, INCLUDING the version path, e.g.
-#   https://tatu-api.onrender.com/api/v1
+#   https://api.findyourtatu.org/api/v1
 # It's read at build time and inlined into the bundle.
 [build]
   base = "web"
@@ -17,3 +17,38 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Security headers for every page.
+# - The CSP ships as Report-Only first: violations show in the browser console
+#   without blocking anything. Once a few days pass cleanly, rename it to
+#   Content-Security-Policy and add `frame-ancestors 'none'` (browsers ignore
+#   that directive in report-only mode, which is why X-Frame-Options does the
+#   anti-framing work for now).
+# - The /review page keeps ADMIN_TOKEN in sessionStorage, so script injection
+#   is the main thing the CSP guards against.
+# - Allowed origins: the API; R2 for artist images (signed URLs on the
+#   account's r2.cloudflarestorage.com host — add R2_PUBLIC_BASE's host here if
+#   that's ever set); MapTiler for the map style/tiles/glyphs; OpenStreetMap
+#   tiles + MapLibre demo glyphs for the keyless fallback map; Google Fonts.
+#   MapLibre runs its workers from blob: URLs.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Content-Security-Policy-Report-Only = """\
+      default-src 'self'; \
+      script-src 'self'; \
+      style-src 'self' https://fonts.googleapis.com; \
+      font-src 'self' https://fonts.gstatic.com; \
+      img-src 'self' data: blob: https://*.r2.cloudflarestorage.com https://api.maptiler.com https://tile.openstreetmap.org; \
+      connect-src 'self' https://api.findyourtatu.org https://api.maptiler.com https://demotiles.maplibre.org https://tile.openstreetmap.org; \
+      worker-src 'self' blob:; \
+      child-src blob:; \
+      object-src 'none'; \
+      base-uri 'self'; \
+      form-action 'self'\
+      """

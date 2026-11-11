@@ -33,7 +33,16 @@ migration task. The steps below are the manual / account actions.
   | `findyourtatu.org` | CNAME (flattened) | `tatu-repo1.netlify.app` |
   | `www` | CNAME | `tatu-repo1.netlify.app` (Netlify redirects to the apex) |
   | `api` | CNAME | `tatu-api-tbm6.onrender.com` |
+  | `findyourtatu.org` | TXT | `v=spf1 -all` |
+  | `_dmarc` | TXT | `v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s` |
 
+  The two TXT records say the domain sends no email, so receivers reject
+  anything spoofing @findyourtatu.org. If the site ever sends mail (e.g. via
+  a transactional provider), replace the SPF record with that provider's and
+  add its DKIM record before sending.
+- **Security headers:** set for the SPA in `netlify.toml`. The CSP is
+  **Report-Only** (shipped 2026-11-11) — promote it to enforcing once the
+  browser console shows no violations on every page type.
 - **API:** https://api.findyourtatu.org (Render custom domain; the original
   https://tatu-api-tbm6.onrender.com still answers).
 - **SPA:** https://findyourtatu.org (Netlify primary domain; the original
