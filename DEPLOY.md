@@ -41,8 +41,9 @@ migration task. The steps below are the manual / account actions.
   a transactional provider), replace the SPF record with that provider's and
   add its DKIM record before sending.
 - **Security headers:** set for the SPA in `netlify.toml`. The CSP is
-  **Report-Only** (shipped 2026-11-11) — promote it to enforcing once the
-  browser console shows no violations on every page type.
+  **enforcing** (Report-Only 2026-11-11, enforcing the same day after
+  checking every outside origin the SPA and API reference). A new outside
+  source must be added to it or the browser blocks it.
 - **API:** https://api.findyourtatu.org (Render custom domain; the original
   https://tatu-api-tbm6.onrender.com still answers).
 - **SPA:** https://findyourtatu.org (Netlify primary domain; the original
