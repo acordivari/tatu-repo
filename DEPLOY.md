@@ -21,10 +21,26 @@ migration task. The steps below are the manual / account actions.
 > **Order:** create R2 → create Render DB + service → restore the database →
 > deploy Netlify → point CORS back at Netlify → migrate images.
 
-## Current deployment status (2026-07)
+## Current deployment status (2026-11)
 
-- **API:** https://tatu-api-tbm6.onrender.com — live (1,658 artists, 666 shops).
-- **SPA:** https://tatu-repo1.netlify.app — live, CORS connected.
+- **Domain:** `findyourtatu.org`, registered on Cloudflare Registrar
+  (2026-11-11, auto-renew on). DNS lives in the same Cloudflare zone; every
+  record is **DNS only** (grey cloud) so Netlify and Render can issue their own
+  Let's Encrypt certificates.
+
+  | Record | Type | Target |
+  |---|---|---|
+  | `findyourtatu.org` | CNAME (flattened) | `tatu-repo1.netlify.app` |
+  | `www` | CNAME | `tatu-repo1.netlify.app` (Netlify redirects to the apex) |
+  | `api` | CNAME | `tatu-api-tbm6.onrender.com` |
+
+- **API:** https://api.findyourtatu.org (Render custom domain; the original
+  https://tatu-api-tbm6.onrender.com still answers).
+- **SPA:** https://findyourtatu.org (Netlify primary domain; the original
+  https://tatu-repo1.netlify.app still answers).
+- **Env tied to the domain:** Render `FRONTEND_ORIGINS` lists the apex, `www`
+  and netlify.app origins; Render `SITE_BASE_URL=https://findyourtatu.org`
+  (sitemap links); Netlify `VITE_API_URL=https://api.findyourtatu.org/api/v1`.
 - **Images:** ✅ live on R2 (the TLS provisioning delay resolved itself; §7 was
   completed).
 
@@ -207,7 +223,10 @@ Reload the site — thumbnails now resolve (API redirect → signed R2 URL).
   e.g. `DATABASE_URL=… APIFY_TOKEN=… bin/rails instagram:scrape[…]`. New images
   attach straight to R2 because production uses it. (Or add a Render cron job.)
 - **Custom domains:** add one to the Netlify site and to the Render service,
-  then update `VITE_API_URL` (Netlify) and `FRONTEND_ORIGINS` (Render).
+  then update `VITE_API_URL` (Netlify, rebuild required — it's inlined at
+  build time), `FRONTEND_ORIGINS` and `SITE_BASE_URL` (Render), and the
+  sitemap line in `web/public/robots.txt`. Switch `VITE_API_URL` only after
+  the API hostname has a valid certificate, or the live site breaks.
 - **Faster images (optional):** make the R2 bucket public (r2.dev or a custom
   domain) and set `config.asset_host` / Active Storage to public URLs to skip
   the API redirect hop. Not required — private signed URLs work out of the box.
