@@ -45,8 +45,12 @@ jobs:
       # Active Storage variants in the tests shell out to ImageMagick.
       - name: Install ImageMagick
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y imagemagick
+      # "3.3", not the exact patch in api/.ruby-version: GitHub's runners keep
+      # only the newest patch of each Ruby series, so an exact pin starts
+      # failing the day the next patch ships.
       - uses: ruby/setup-ruby@v1
         with:
+          ruby-version: "3.3"
           working-directory: api
           bundler-cache: true
       - name: Prepare database
@@ -62,8 +66,12 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v7
+      # "3.3", not the exact patch in api/.ruby-version: GitHub's runners keep
+      # only the newest patch of each Ruby series, so an exact pin starts
+      # failing the day the next patch ships.
       - uses: ruby/setup-ruby@v1
         with:
+          ruby-version: "3.3"
           working-directory: api
           bundler-cache: true
       # Known advisories against the locked gem versions.
@@ -74,6 +82,26 @@ jobs:
       - name: Brakeman
         if: always()
         run: bin/brakeman --no-pager
+
+  # Render builds this same Dockerfile on every push to main. Building it here
+  # too means a broken image shows up as a failed check with a readable log,
+  # and the boot step catches an app that builds but cannot start. Nothing is
+  # pushed anywhere; the R2 values are placeholders so storage config loads.
+  api-image:
+    name: API Docker image builds and boots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the production image
+        run: docker build --tag tatu-api:ci api
+      - name: Boot the app inside it
+        run: >-
+          docker run --rm
+          -e SECRET_KEY_BASE_DUMMY=1
+          -e R2_BUCKET=ci -e R2_ACCESS_KEY_ID=ci -e R2_SECRET_ACCESS_KEY=ci
+          -e R2_ENDPOINT=https://ci.r2.cloudflarestorage.com
+          tatu-api:ci
+          ./bin/rails runner 'puts "booted Rails #{Rails.version} on Ruby #{RUBY_VERSION}"; puts `convert -version`.lines.first'
 
   web:
     name: Web build and advisories

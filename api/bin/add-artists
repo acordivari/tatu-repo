@@ -24,7 +24,7 @@ echo "→ adding to PRODUCTION: $handles"
 
 # RAILS_ENV=production so Active Storage = R2 (images upload straight to R2 with
 # service_name=cloudflare — no migration/flip needed for new artists).
-RBENV_VERSION="${RBENV_VERSION:-3.3.0}" \
+RBENV_VERSION="${RBENV_VERSION:-3.3.13}" \
 RAILS_ENV=production \
 RAILS_MASTER_KEY="$(cat config/master.key)" \
 DATABASE_URL="$PROD_DATABASE_URL" \

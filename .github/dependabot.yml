@@ -24,6 +24,12 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
+  # The Ruby base image in api/Dockerfile (keep api/.ruby-version in step).
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

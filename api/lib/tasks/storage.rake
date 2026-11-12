@@ -4,7 +4,7 @@ namespace :storage do
   # files physically live, with the R2_* env vars set:
   #
   #   R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_ENDPOINT=… R2_BUCKET=… \
-  #     RBENV_VERSION=3.3.0 bin/rails storage:migrate_to_r2
+  #     RBENV_VERSION=3.3.13 bin/rails storage:migrate_to_r2
   #
   # Idempotent: blobs already present in R2 are skipped, so it's safe to re-run.
   desc "Copy all Active Storage blobs from the local disk to Cloudflare R2"
@@ -38,7 +38,7 @@ namespace :storage do
   # Run it like bin/add-artists — locally, against production:
   #
   #   DATABASE_URL=$PROD_DATABASE_URL R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… \
-  #     R2_ENDPOINT=… R2_BUCKET=… RAILS_ENV=production RBENV_VERSION=3.3.0 \
+  #     R2_ENDPOINT=… R2_BUCKET=… RAILS_ENV=production RBENV_VERSION=3.3.13 \
   #     bin/rails storage:preprocess_variants
   #
   # Idempotent: already-processed variants are skipped by Active Storage.

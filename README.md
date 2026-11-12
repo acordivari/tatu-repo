@@ -85,7 +85,7 @@ owns its own images and location data.
 
 ## Running locally
 
-Prereqs: Ruby 3.3.0 (`rbenv`), Node 20+, PostgreSQL running.
+Prereqs: Ruby 3.3.13 (`rbenv`), Node 20+, PostgreSQL running.
 
 ```bash
 # 1. Backend
