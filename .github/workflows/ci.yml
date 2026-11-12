@@ -85,8 +85,9 @@ jobs:
 
   # Render builds this same Dockerfile on every push to main. Building it here
   # too means a broken image shows up as a failed check with a readable log,
-  # and the boot step catches an app that builds but cannot start. Nothing is
-  # pushed anywhere; the R2 values are placeholders so storage config loads.
+  # and the boot step catches an app that builds but cannot start, or that
+  # starts but cannot resize an image (a gem upgrade once dropped the resize
+  # backend without failing a single test). Nothing is pushed anywhere; the R2 values are placeholders so storage config loads.
   api-image:
     name: API Docker image builds and boots
     runs-on: ubuntu-latest
@@ -101,7 +102,13 @@ jobs:
           -e R2_BUCKET=ci -e R2_ACCESS_KEY_ID=ci -e R2_SECRET_ACCESS_KEY=ci
           -e R2_ENDPOINT=https://ci.r2.cloudflarestorage.com
           tatu-api:ci
-          ./bin/rails runner 'puts "booted Rails #{Rails.version} on Ruby #{RUBY_VERSION}"; puts `convert -version`.lines.first'
+          ./bin/rails runner 'puts "booted Rails #{Rails.version} on Ruby #{RUBY_VERSION}"; puts `convert -version`.lines.first;
+          require "image_processing/mini_magick";
+          system("convert", "-size", "1280x960", "xc:gray", "/tmp/ci.jpg") or abort("convert failed");
+          out = ImageProcessing::MiniMagick.source("/tmp/ci.jpg").resize_to_limit(640, 640).call;
+          dims = MiniMagick::Image.new(out.path).dimensions;
+          abort("resize gave #{dims.inspect}") unless dims == [640, 480];
+          puts "resized a 1280x960 image to #{dims.join(%q(x))} with the image gems in this image"'
 
   web:
     name: Web build and advisories

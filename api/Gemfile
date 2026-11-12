@@ -26,7 +26,11 @@ gem "bootsnap", require: false
 gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem "image_processing", "~> 1.2"
+gem "image_processing", "~> 2.2"
+# image_processing 2 no longer pulls in a backend, so name ours. Without it
+# every variant raises LoadError (see config/application.rb: :mini_magick).
+# WorkImageClassifier.downscale also uses it directly.
+gem "mini_magick", "~> 5.3"
 
 # Active Storage on Cloudflare R2 (S3-compatible) in production
 gem "aws-sdk-s3", require: false
