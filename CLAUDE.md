@@ -27,7 +27,8 @@ Seed data gives 3 demo artists with images + coordinates, so search/filters/map 
 ## Common commands
 
 - API tests: `cd api && bin/rails test` (test/models, test/services, test/integration)
-- API lint / security: `cd api && bin/rubocop` / `bin/brakeman`
+- API lint / security: `cd api && bin/rubocop` / `bin/brakeman` / `bin/bundler-audit` (gem advisories)
+- Web advisories: `cd web && npm audit --omit=dev`
 - Web lint: `cd web && npm run lint`
 - Web typecheck + build: `cd web && npm run build` (`tsc -b && vite build`)
 - Health check: `curl http://localhost:3000/up`

@@ -1,0 +1,97 @@
+# Tests and security checks for both apps. Deploys do not depend on this:
+# Netlify and Render build from main on their own. A red run is a signal to
+# look, not a gate.
+#
+# The weekly schedule matters as much as the push trigger: a dependency
+# advisory can be published against code that has not changed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 14 * * 1" # Mondays 14:17 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-test:
+    name: API tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/api_test
+    steps:
+      - uses: actions/checkout@v7
+      # Active Storage variants in the tests shell out to ImageMagick.
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y imagemagick
+      - uses: ruby/setup-ruby@v1
+        with:
+          working-directory: api
+          bundler-cache: true
+      - name: Prepare database
+        run: bin/rails db:test:prepare
+      - name: Run tests
+        run: bin/rails test
+
+  api-security:
+    name: API security scans
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          working-directory: api
+          bundler-cache: true
+      # Known advisories against the locked gem versions.
+      - name: Gem advisories
+        run: bin/bundler-audit
+      # Static analysis. Also fails once the Rails line is past end of support,
+      # and when Brakeman itself is out of date (bin/brakeman --ensure-latest).
+      - name: Brakeman
+        if: always()
+        run: bin/brakeman --no-pager
+
+  web:
+    name: Web build and advisories
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20 # keep in step with NODE_VERSION in netlify.toml
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # Only what ships to browsers; lint tooling advisories are not exposure.
+      - name: npm advisories (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck and build
+        if: always()
+        run: npm run build

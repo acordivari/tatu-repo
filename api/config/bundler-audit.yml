@@ -1,0 +1,4 @@
+# Advisories deliberately accepted, each with the reason it does not apply.
+# Keep this empty unless an advisory has no fix and has been judged harmless
+# here — an ignored advisory is invisible from then on.
+ignore: []

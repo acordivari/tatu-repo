@@ -1,6 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+// MapLibre 6 is ESM-only and no longer finds its own worker inside a bundle:
+// Vite has to emit the worker as a file and hand MapLibre the URL. The worker
+// is served from our own origin, which the CSP's worker-src 'self' allows.
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { FeatureCollection, Point } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api } from "../api/client";
@@ -47,6 +51,8 @@ function toGeoJSON(artists: ArtistMarker[]): FeatureCollection {
   };
 }
 
+maplibregl.setWorkerUrl(workerUrl);
+
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -54,7 +60,8 @@ export default function MapPage() {
   usePageMeta("Map");
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const loadedRef = useRef(false);
+  // True once the style has loaded and the artist source and layers exist.
+  const [ready, setReady] = useState(false);
   const { data } = useQuery({ queryKey: ["map-artists"], queryFn: () => api.mapArtists() });
 
   // Initialize the map once.
@@ -148,12 +155,11 @@ export default function MapPage() {
         map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
       }
 
-      loadedRef.current = true;
-      map.fire("tatu:ready");
+      setReady(true);
     });
 
     return () => {
-      loadedRef.current = false;
+      setReady(false);
       map.remove();
       mapRef.current = null;
     };
@@ -162,14 +168,9 @@ export default function MapPage() {
   // Feed artist data into the clustered source (whenever both are ready).
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !data) return;
-    const setData = () =>
-      (map.getSource("artists") as maplibregl.GeoJSONSource | undefined)?.setData(
-        toGeoJSON(data)
-      );
-    if (loadedRef.current) setData();
-    else map.once("tatu:ready", setData);
-  }, [data]);
+    if (!map || !data || !ready) return;
+    (map.getSource("artists") as maplibregl.GeoJSONSource | undefined)?.setData(toGeoJSON(data));
+  }, [data, ready]);
 
   return (
     <div className="map-wrap">

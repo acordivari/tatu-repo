@@ -44,10 +44,22 @@ migration task. The steps below are the manual / account actions.
   **enforcing** (Report-Only 2026-11-11, enforcing the same day after
   checking every outside origin the SPA and API reference). A new outside
   source must be added to it or the browser blocks it.
+- **Rate limits:** `api/config/initializers/rack_attack.rb` counts per
+  visitor using Cloudflare's `CF-Connecting-IP` (Render fronts every service
+  with Cloudflare, so Rack's own `ip` is a Cloudflare edge address, not the
+  visitor). Failed admin-token attempts on `/api/v1/candidates` have their own
+  limit. To check after a deploy: six quick requests to `/sitemap.xml` from
+  one machine should end in a 429 (up to eleven, with two Puma workers each
+  keeping their own counters).
+- **Dependency checks:** `.github/workflows/ci.yml` runs the API tests,
+  `bin/bundler-audit`, Brakeman and `npm audit` on every push and weekly;
+  `.github/dependabot.yml` opens grouped update PRs. Rails 8.0 passed end of
+  support on 2026-11-07, so Brakeman fails until the app moves to Rails 8.1 —
+  which needs Ruby 3.3.1 or newer (8.1 does not parse on 3.3.0).
 - **API:** https://api.findyourtatu.org (Render custom domain; the original
   https://tatu-api-tbm6.onrender.com still answers).
 - **SPA:** https://findyourtatu.org (Netlify primary domain; the original
-  https://tatu-repo1.netlify.app still answers).
+  https://tatu-repo1.netlify.app redirects to it — see `netlify.toml`).
 - **Env tied to the domain:** Render `FRONTEND_ORIGINS` lists the apex, `www`
   and netlify.app origins; Render `SITE_BASE_URL=https://findyourtatu.org`
   (sitemap links); Netlify `VITE_API_URL=https://api.findyourtatu.org/api/v1`.

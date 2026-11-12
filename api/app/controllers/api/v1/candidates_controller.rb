@@ -30,11 +30,9 @@ module Api
       # candidates endpoint requires the shared admin token
       # (Authorization: Bearer <ADMIN_TOKEN>; the /review page prompts for it).
       # With no ADMIN_TOKEN configured, the endpoints are disabled outright.
+      # Failed attempts are rate-limited per client (see rack_attack.rb).
       def require_admin!
-        expected = ENV["ADMIN_TOKEN"].to_s
-        provided = request.authorization.to_s.delete_prefix("Bearer ").strip
-        return if expected.present? && provided.present? &&
-                  ActiveSupport::SecurityUtils.secure_compare(provided, expected)
+        return if AdminToken.valid?(request.authorization)
 
         render json: { error: "Unauthorized" }, status: :unauthorized
       end

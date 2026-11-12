@@ -1,0 +1,51 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "3848bc84206ddc0d383de3522ae1b4a9df6b5b33386f1d70fa315c6b7da23528",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/artist.rb",
+      "line": 45,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "where(\"LOWER(city) = :q OR LOWER(#{Arel.sql(\"COALESCE(NULLIF(region_canonical, ''), region)\").to_s}) = :q OR LOWER(country) = :q\", :q => q.to_s.strip.downcase)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Artist",
+        "method": "search"
+      },
+      "user_input": "Arel.sql(\"COALESCE(NULLIF(region_canonical, ''), region)\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "False positive: the only interpolated value is the REGION_KEY constant (a column expression defined in the model); the user-supplied term is passed as a bind parameter."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "40fb5902cbb3ee77deefef5a088627580582d035717014c177ef68cc0813c24b",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/artist.rb",
+      "line": 34,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "where(\"LOWER(#{Arel.sql(\"COALESCE(NULLIF(region_canonical, ''), region)\").to_s}) = ?\", r.to_s.strip.downcase)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Artist",
+        "method": "in_region"
+      },
+      "user_input": "Arel.sql(\"COALESCE(NULLIF(region_canonical, ''), region)\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "False positive: the only interpolated value is the REGION_KEY constant (a column expression defined in the model); the user-supplied term is passed as a bind parameter."
+    }
+  ],
+  "brakeman_version": "8.1.0"
+}

@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+require "rubygems"
+require "bundler/setup"
+
+# Check Gemfile.lock against the Ruby advisory database, refreshing it first.
+# Known, accepted advisories (if there are ever any) go in
+# config/bundler-audit.yml with the reason.
+ARGV.concat(%w[check --update --config config/bundler-audit.yml]) if ARGV.empty?
+
+load Gem.bin_path("bundler-audit", "bundler-audit")

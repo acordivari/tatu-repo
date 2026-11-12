@@ -11,6 +11,16 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# One public address. The site also answers on its original netlify.app name;
+# send that to the real domain so there is a single origin to protect (and no
+# duplicate copy for crawlers). Listed first: Netlify applies the first match.
+# Deploy previews use other hostnames and are not affected.
+[[redirects]]
+  from = "https://tatu-repo1.netlify.app/*"
+  to = "https://findyourtatu.org/:splat"
+  status = 301
+  force = true
+
 # Client-side routing: serve index.html for any non-asset path so deep links
 # like /shops/bangbangnyc work on refresh.
 [[redirects]]
