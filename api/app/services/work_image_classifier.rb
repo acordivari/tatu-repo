@@ -18,7 +18,7 @@ class WorkImageClassifier
 
   # Bumped whenever the prompt, categories, or model change, so a re-run can
   # find verdicts produced by an older classifier instead of trusting the stamp.
-  VERSION = "haiku45-v8"
+  VERSION = "haiku45-v9"
 
   # Longest edge sent to the model. Image tokens scale with pixels (~w*h/750),
   # and 512px is comfortably enough to tell a tattoo from a flyer while costing
@@ -36,7 +36,19 @@ class WorkImageClassifier
   # "design" — half of one reel-heavy artist's gallery was stencils and gloved
   # hands. "process" is hidden (see Post::NOT_WORK_KINDS). "tattoo" and "design"
   # verdicts from v5-v7 may still be process shots until re-checked.
+  #
+  # v9 changed no wording, only WHEN the OCR text is shown. v8 was validated
+  # with captions but without OCR text, and on production the text talked the
+  # model out of "process": a reel cover of the artist wiping down a leg,
+  # overlaid "the finished piece", came back "tattoo" 5 runs in 5 with the text
+  # and "process" 5 in 5 without. So the picture is judged first, and the text
+  # is consulted only where it was ever meant to matter (see #classify).
   KINDS = %w[tattoo process design person promo other].freeze
+
+  # The only verdict burned-in text may add. It exists to catch a flyer whose
+  # dates are unreadable at 512px; it has no business deciding whether a photo
+  # shows a finished tattoo or the session that made it.
+  TEXT_KINDS = %w[promo].freeze
 
   INSTRUCTIONS = <<~TXT.freeze
     You are sorting images from tattoo artists' Instagram accounts for a
@@ -198,32 +210,23 @@ class WorkImageClassifier
     (input_tokens / 1_000_000.0 * PRICE_IN) + (output_tokens / 1_000_000.0 * PRICE_OUT)
   end
 
-  # Classify one image given its JPEG bytes and any OCR text read from it.
-  # Returns a Verdict, or nil if the call failed or the model returned
+  # Classify one image given its JPEG bytes, its caption and any OCR text read
+  # from it. Returns a Verdict, or nil if a call failed or the model returned
   # something unusable — callers must treat nil as "unknown" and leave the post
   # alone rather than defaulting it to a kind, which would quietly mislabel work.
+  #
+  # Two looks, the second only when it can matter. The first judges the picture
+  # with the caption and NO burned-in text. If that says the image is work and
+  # OCR found text, a second look shows the text and may only overrule the
+  # first with "promo" — any other answer leaves the first verdict standing.
   def classify(jpeg_bytes, ocr_text: nil, caption: nil)
-    message = @client.messages.create(
-      model: @model,
-      max_tokens: 128,
-      messages: [ {
-        role: "user",
-        content: [
-          { type: "image",
-            source: { type: "base64", media_type: "image/jpeg",
-                      data: Base64.strict_encode64(jpeg_bytes) } },
-          { type: "text", text: self.class.prompt(ocr_text, caption) }
-        ]
-      } ]
-    )
-    @lock.synchronize do
-      @input_tokens += message.usage.input_tokens
-      @output_tokens += message.usage.output_tokens
-    end
-    parse(message.content.select { |b| b.type == :text }.map(&:text).join)
-  rescue Anthropic::Errors::APIError => e
-    Rails.logger.warn("[WorkImageClassifier] #{e.class}: #{e.message}")
-    nil
+    verdict = ask(jpeg_bytes, nil, caption)
+    return verdict unless verdict&.work? && ocr_text.to_s.squish.present?
+
+    with_text = ask(jpeg_bytes, ocr_text, caption)
+    return nil if with_text.nil? # unknown, not "the text changed nothing": retry
+
+    TEXT_KINDS.include?(with_text.kind) ? with_text : verdict
   end
 
   # The instructions, plus the OCR block when there is text worth reading.
@@ -254,6 +257,31 @@ class WorkImageClassifier
   end
 
   private
+
+  # One request: the image plus the prompt for whatever context is given.
+  def ask(jpeg_bytes, ocr_text, caption)
+    message = @client.messages.create(
+      model: @model,
+      max_tokens: 128,
+      messages: [ {
+        role: "user",
+        content: [
+          { type: "image",
+            source: { type: "base64", media_type: "image/jpeg",
+                      data: Base64.strict_encode64(jpeg_bytes) } },
+          { type: "text", text: self.class.prompt(ocr_text, caption) }
+        ]
+      } ]
+    )
+    @lock.synchronize do
+      @input_tokens += message.usage.input_tokens
+      @output_tokens += message.usage.output_tokens
+    end
+    parse(message.content.select { |b| b.type == :text }.map(&:text).join)
+  rescue Anthropic::Errors::APIError => e
+    Rails.logger.warn("[WorkImageClassifier] #{e.class}: #{e.message}")
+    nil
+  end
 
   def parse(text)
     json = text[/\{.*\}/m]

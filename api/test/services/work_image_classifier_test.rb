@@ -73,6 +73,63 @@ class WorkImageClassifierTest < ActiveSupport::TestCase
     end
   end
 
+  # v9: the picture is judged first; burned-in text gets a second look that can
+  # only add "promo". Stubs #ask, recording which calls carried the OCR text.
+  def two_look(first:, second: nil)
+    asked = []
+    classifier = WorkImageClassifier.allocate
+    classifier.define_singleton_method(:ask) do |_bytes, ocr_text, _caption|
+      asked << ocr_text
+      kind = ocr_text.nil? ? first : second
+      kind && WorkImageClassifier::Verdict.new(kind: kind, confidence: 0.9)
+    end
+    [ classifier, asked ]
+  end
+
+  test "the first look never sees burned-in text" do
+    classifier, asked = two_look(first: "process")
+
+    assert_equal "process", classifier.classify("jpg", ocr_text: "the finished piece", caption: "Done!").kind
+    assert_equal [ nil ], asked
+  end
+
+  test "burned-in text cannot turn a process shot into a tattoo" do
+    classifier, = two_look(first: "process", second: "tattoo")
+
+    assert_equal "process", classifier.classify("jpg", ocr_text: "the finished piece").kind
+  end
+
+  test "burned-in text can turn work into promo, and nothing else" do
+    classifier, asked = two_look(first: "tattoo", second: "promo")
+    assert_equal "promo", classifier.classify("jpg", ocr_text: "BERLIN 27/10-30/10 BOOKS OPEN").kind
+    assert_equal [ nil, "BERLIN 27/10-30/10 BOOKS OPEN" ], asked
+
+    %w[design person process other].each do |second|
+      classifier, = two_look(first: "tattoo", second: second)
+      assert_equal "tattoo", classifier.classify("jpg", ocr_text: "Worth the wait.").kind, "second look said #{second}"
+    end
+  end
+
+  test "an image with no burned-in text is judged once" do
+    classifier, asked = two_look(first: "tattoo", second: "promo")
+
+    assert_equal "tattoo", classifier.classify("jpg", ocr_text: " \n ").kind
+    assert_equal [ nil ], asked
+  end
+
+  test "a failed second look is unknown, not a verdict" do
+    classifier, = two_look(first: "design", second: nil)
+
+    assert_nil classifier.classify("jpg", ocr_text: "TOUR DATES")
+  end
+
+  test "a failed first look is unknown" do
+    classifier, asked = two_look(first: nil, second: "promo")
+
+    assert_nil classifier.classify("jpg", ocr_text: "TOUR DATES")
+    assert_equal [ nil ], asked
+  end
+
   test "prompt carries the caption as medium context only when present" do
     assert_equal WorkImageClassifier::INSTRUCTIONS, WorkImageClassifier.prompt(nil, "  ")
 

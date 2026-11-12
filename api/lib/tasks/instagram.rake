@@ -230,7 +230,7 @@ namespace :instagram do
   end
 
   desc "Classify images as tattoo/process/design/person/promo/other via Claude vision (COSTS MONEY). " \
-       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | previews | notext | all " \
+       "Usage: rake instagram:classify_images[limit,scope]  scope: ambiguous (default) | nonwork | risky | previews | notext | text | all " \
        "(narrow with IDS=1,2, ARTIST=handle or KIND=person; RECHECK=1 re-judges older-version verdicts)"
   task :classify_images, %i[limit scope] => :environment do |_t, args|
     abort "ANTHROPIC_API_KEY is not set." unless WorkImageClassifier.configured?
@@ -251,6 +251,11 @@ namespace :instagram do
             # promo card or a lettering tattoo, and only a picture tells them apart.
             rel.where(ocr_mean_height: 0.06..)
           when "notext"  then rel.where("ocr_text IS NULL OR length(ocr_text) = 0")
+          when "text"
+            # Images with burned-in text: the only ones whose verdict depends
+            # on how the classifier uses OCR text, so the only ones worth
+            # re-checking after a change to that (v9).
+            rel.where("length(posts.ocr_text) > 0")
           when "nonwork"
             # Re-check only verdicts that would HIDE an image. When the prompt
             # improves, this is where a wrong call is expensive: a hidden work
@@ -279,7 +284,7 @@ namespace :instagram do
             end
             rel.where(id: ids)
           when "all"     then rel
-          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|previews|notext|all)."
+          else abort "Unknown scope #{args[:scope].inspect} (ambiguous|nonwork|risky|previews|notext|text|all)."
           end
     # Narrow to a known set (validating a prompt change on images already
     # inspected by eye): IDS=1,2,3, KIND=person, and/or ARTIST=handle1,handle2.
@@ -296,10 +301,11 @@ namespace :instagram do
     # v7 measured ~$0.0017 on its 192-image validation set (the OCR and caption
     # blocks lengthen the prompt well past v2's ~$0.0011). v8's longer prompt
     # measured $0.0021 on 92 images sent without OCR text, where v7 ran
-    # $0.0016 — so ~$0.0022 once OCR blocks are included.
-    est = ids.size * 0.0022
+    # $0.0016. v9 looks twice at a work image with burned-in text (about a
+    # quarter of that set), which measured $0.0026 on 93 images.
+    est = ids.size * 0.0026
     puts "Classifying #{ids.size} images with #{WorkImageClassifier::MODEL} " \
-         "(~$#{format('%.2f', est)} — estimated at ~$0.0022/image)…"
+         "(~$#{format('%.2f', est)} — estimated at ~$0.0026/image)…"
 
     classifier = WorkImageClassifier.new
     threads = ENV.fetch("THREADS", 4).to_i.clamp(1, 8)
@@ -309,12 +315,19 @@ namespace :instagram do
     done = failed = 0
     lock = Mutex.new
 
+    # A database connection is held only for the read and the write, never
+    # across the API call. Holding one per thread for the whole request let 8
+    # threads starve the 5-connection pool: a v9 re-check died two images from
+    # the end with ConnectionTimeoutError, raised outside the rescue below.
+    pool = ActiveRecord::Base.connection_pool
     workers = threads.times.map do
       Thread.new do
         while (id = queue.pop(true) rescue nil)
-          ActiveRecord::Base.connection_pool.with_connection do
-            post = Post.with_image_blobs.find(id)
-            bytes = WorkImageClassifier.downscale(card_bytes(post))
+          begin
+            post, bytes = pool.with_connection do
+              found = Post.with_image_blobs.find(id)
+              [ found, WorkImageClassifier.downscale(card_bytes(found)) ]
+            end
             verdict = classifier.classify(bytes, ocr_text: post.ocr_text, caption: post.caption)
             if verdict.nil?
               # No verdict means unknown. Deliberately NOT stamped: leaving it
@@ -322,11 +335,13 @@ namespace :instagram do
               # would quietly mislabel work as junk.
               lock.synchronize { failed += 1 }
             else
-              post.update_columns(
-                content_kind: verdict.kind, content_confidence: verdict.confidence,
-                classified_at: Time.current, classifier_version: WorkImageClassifier::VERSION,
-                updated_at: Time.current
-              )
+              pool.with_connection do
+                post.update_columns(
+                  content_kind: verdict.kind, content_confidence: verdict.confidence,
+                  classified_at: Time.current, classifier_version: WorkImageClassifier::VERSION,
+                  updated_at: Time.current
+                )
+              end
               lock.synchronize { done += 1; tally[verdict.kind] += 1 }
             end
           rescue StandardError => e
@@ -345,14 +360,18 @@ namespace :instagram do
 
     puts "\nDone. #{done} classified, #{failed} unresolved (left for a re-run). " \
          "Cost: $#{format('%.2f', classifier.cost_usd)}."
-    puts "Review before hiding anything: rake instagram:classify_report"
+    puts "Verdicts take effect as soon as they are stored. Review them: rake instagram:classify_report"
   end
 
-  desc "Show what the vision classifier decided, so its verdicts can be checked before use."
+  desc "Show what the vision classifier decided and how many images its verdicts hide."
   task classify_report: :environment do
     total = Post.classified.count
     abort "Nothing classified yet — run rake instagram:classify_images first." if total.zero?
 
+    # Say which database this is: the task reads whatever DATABASE_URL points
+    # at, and a local report has been mistaken for production's.
+    db = ActiveRecord::Base.connection_db_config
+    puts "Database: #{db.database} on #{db.host || 'localhost'} (#{Rails.env})"
     puts "Classified #{total} images.\n"
     Post.classified.group(:content_kind).count.sort_by { |_, v| -v }.each do |kind, n|
       puts format("  %-8s %6d  (%.1f%%)", kind, n, 100.0 * n / total)
@@ -366,8 +385,8 @@ namespace :instagram do
     end
 
     hidden = Post.not_work.count
-    puts "\n#{hidden} images would be hidden by Post.not_work " \
-         "(OCR overlays + non-work verdicts). Nothing is filtered from the site yet."
+    puts "\n#{hidden} images in this database are hidden from galleries, the feed and " \
+         "thumbnails by Post.not_work (OCR overlays + non-work verdicts)."
   end
 
   desc "Summarise what OCR found, so the overlay rule can be judged before it is used."
