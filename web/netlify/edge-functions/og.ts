@@ -4,8 +4,11 @@
 // Fails open: any error or API miss returns the untouched shell.
 import type { Context } from "@netlify/edge-functions";
 
+// The fallback is the custom domain, never the onrender.com address: that one
+// can be switched off in Render, and this function fails open, so a dead
+// fallback would silently drop every link preview.
 const API_BASE =
-  Netlify.env.get("VITE_API_URL") ?? "https://tatu-api-tbm6.onrender.com/api/v1";
+  Netlify.env.get("VITE_API_URL") ?? "https://api.findyourtatu.org/api/v1";
 
 // Only crawlers/unfurlers need server-rendered tags — humans run the SPA,
 // and skipping them avoids adding an API round-trip to every page view.

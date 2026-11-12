@@ -174,7 +174,7 @@ empty DB are harmless; only `ERROR:`/`FATAL:` matter. Then **Manual Deploy →
 Deploy latest** on `tatu-api`. Sanity check:
 
 ```bash
-curl https://tatu-api-tbm6.onrender.com/api/v1/artists | head -c 200
+curl https://api.findyourtatu.org/api/v1/artists | head -c 200
 ```
 
 Gotchas we hit (already fixed in the repo, noted for posterity):
@@ -198,7 +198,7 @@ Gotchas we hit (already fixed in the repo, noted for posterity):
    `netlify.toml` sets base `web/`, build `npm run build`, publish `dist`, and
    the SPA redirect automatically.
 2. **Site settings → Environment variables** → add
-   `VITE_API_URL = https://tatu-api.onrender.com/api/v1`
+   `VITE_API_URL = https://api.findyourtatu.org/api/v1`
    (the Render API base **including** `/api/v1`). Vite inlines it at build time.
 3. Deploy. Note the site URL, e.g. `https://tatu.netlify.app`.
 
