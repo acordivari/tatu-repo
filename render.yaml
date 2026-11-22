@@ -24,8 +24,13 @@ services:
         value: "true"
       - key: RAILS_MAX_THREADS
         value: "5"
+      # One Puma process (config/puma.rb treats 0 and 1 alike). Two workers
+      # plus the master sat at the starter plan's 512 MB limit and the health
+      # check timed out every few hours: 24 restarts, 2026-11-13 to 11-22.
+      # One process settles around 250 MB, and with half a CPU a second
+      # worker added no real capacity. Raise this only with a bigger plan.
       - key: WEB_CONCURRENCY
-        value: "2"
+        value: "1"
       # Secret — paste the contents of api/config/master.key
       - key: RAILS_MASTER_KEY
         sync: false

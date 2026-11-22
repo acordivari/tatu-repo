@@ -27,14 +27,19 @@
 threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 
-# Fork worker processes when WEB_CONCURRENCY asks for them (Render sets 2 —
-# see render.yaml). Without this call Puma stays single-process no matter what
-# the env var says. preload_app! shares memory copy-on-write; Rails reconnects
-# Active Record in forked workers automatically.
+# One process unless WEB_CONCURRENCY asks for two or more workers. Render sets
+# 1 (see render.yaml): two workers plus the master did not fit the starter
+# plan's 512 MB. `workers 0` is said out loud because Puma also reads
+# WEB_CONCURRENCY itself, and on its own it turns "1" into a master plus one
+# forked worker — two processes where one was meant. With several workers,
+# preload_app! shares memory copy-on-write and Rails reconnects Active Record
+# in each fork automatically.
 workers_count = ENV.fetch("WEB_CONCURRENCY", 1).to_i
 if workers_count > 1
   workers workers_count
   preload_app!
+else
+  workers 0
 end
 
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.

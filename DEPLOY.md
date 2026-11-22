@@ -54,8 +54,11 @@ migration task. The steps below are the manual / account actions.
 - **Dependency checks:** `.github/workflows/ci.yml` runs the API tests,
   `bin/bundler-audit`, Brakeman and `npm audit` on every push and weekly;
   `.github/dependabot.yml` opens grouped update PRs. The app runs Rails 8.1
-  on Ruby 3.3.13 (moved 2026-11-11: Rails 8.0 passed end of support on
-  2026-11-07, and 8.1 does not parse on Ruby 3.3.0). The Ruby version is
+  on Ruby 3.3.14 (Rails 8.1 since 2026-11-11: Rails 8.0 passed end of support
+  on 2026-11-07, and 8.1 does not parse on Ruby 3.3.0. Ruby 3.3.14 since
+  2026-11-22: it fixes the 2026-11-18 Regexp and String case-conversion
+  advisory, which this API is exposed to because it lowercases search and
+  filter text from public requests). The Ruby version is
   pinned in three places that must agree: `api/.ruby-version`,
   `ARG RUBY_VERSION` in `api/Dockerfile`, and the `RBENV_VERSION` default in
   `api/bin/add-artists`. CI deliberately floats on the newest 3.3 patch.
@@ -85,7 +88,7 @@ this order:
    cd api
    set -a; source .env; set +a    # loads R2_* and PROD_DATABASE_URL
    RAILS_ENV=production RAILS_MASTER_KEY="$(cat config/master.key)" \
-   DATABASE_URL="$PROD_DATABASE_URL" RBENV_VERSION=3.3.13 \
+   DATABASE_URL="$PROD_DATABASE_URL" RBENV_VERSION=3.3.14 \
    bin/rails storage:preprocess_variants
    ```
    Re-run it after each `bin/add-artists` batch (idempotent).
@@ -99,9 +102,12 @@ this order:
    but public URLs are permanent and cache best.
 4. **robots.txt** (`web/public/robots.txt`) hardcodes the API sitemap URL —
    update it if the API moves to a custom domain.
-5. **Watch memory after deploy:** Puma now really runs 2 workers (the old
-   config silently ignored `WEB_CONCURRENCY`), roughly doubling RAM on the
-   512 MB starter instance. If it's tight, set `WEB_CONCURRENCY=1`.
+5. **Memory:** the API runs one Puma process (`WEB_CONCURRENCY=1` in
+   `render.yaml`), about 250 MB of the starter instance's 512 MB. Two workers
+   did not fit: from 2026-11-13 to 11-22 memory climbed to the limit every few
+   hours, the health check timed out, and Render restarted the service
+   (Events showed "HTTP health check failed"; Metrics showed the sawtooth).
+   Move to a bigger plan before raising it.
 
 ---
 
@@ -134,7 +140,7 @@ local `api/storage/`. Upload them to R2 once (idempotent, safe to re-run):
 cd api
 R2_ACCESS_KEY_ID=…  R2_SECRET_ACCESS_KEY=…  \
 R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com  R2_BUCKET=tatu-images \
-RBENV_VERSION=3.3.13 bin/rails storage:migrate_to_r2
+RBENV_VERSION=3.3.14 bin/rails storage:migrate_to_r2
 # → "Done. copied:4364 skipped:0 missing:0 of 4364 blobs."
 ```
 
@@ -228,7 +234,7 @@ Then two steps:
 
 ```bash
 # a) Upload the 4,364 image blobs from local disk -> R2 (run locally; R2_* in api/.env)
-cd api && RBENV_VERSION=3.3.13 bin/rails storage:migrate_to_r2
+cd api && RBENV_VERSION=3.3.14 bin/rails storage:migrate_to_r2
 
 # b) Re-point the restored blobs at R2 IN PRODUCTION. The dump's blobs carry
 #    service_name="local" (from the dev machine), so production would otherwise

@@ -8,7 +8,7 @@
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 
 # Make sure RUBY_VERSION matches the Ruby version in .ruby-version
-ARG RUBY_VERSION=3.3.13
+ARG RUBY_VERSION=3.3.14
 # The Debian release is named, not left to "-slim": that tag moved from
 # bookworm to trixie between Ruby 3.3.0 and 3.3.13, and an operating-system
 # jump should be a deliberate change, tested on its own. Moving the Ruby patch
