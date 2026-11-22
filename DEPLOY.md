@@ -62,8 +62,10 @@ migration task. The steps below are the manual / account actions.
   pinned in three places that must agree: `api/.ruby-version`,
   `ARG RUBY_VERSION` in `api/Dockerfile`, and the `RBENV_VERSION` default in
   `api/bin/add-artists`. CI deliberately floats on the newest 3.3 patch.
-- **API:** https://api.findyourtatu.org (Render custom domain; the original
-  https://tatu-api-tbm6.onrender.com still answers).
+- **API:** https://api.findyourtatu.org (Render custom domain. The original
+  https://tatu-api-tbm6.onrender.com has returned 404 since 2026-11-22: the
+  "Render Subdomain" toggle under Settings → Custom Domains is off. The `api`
+  CNAME still points at that hostname and must stay).
 - **SPA:** https://findyourtatu.org (Netlify primary domain; the original
   https://tatu-repo1.netlify.app redirects to it — see `netlify.toml`).
 - **Env tied to the domain:** Render `FRONTEND_ORIGINS` lists the apex, `www`
